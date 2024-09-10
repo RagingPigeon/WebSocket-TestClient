@@ -1,7 +1,12 @@
-use std::panic::Location;
+use std::{
+    collections::HashMap,
+    fmt,
+    panic::Location,
+    str::FromStr
+};
 
 use chrono::{ Date, DateTime, Utc };
-use std::fmt;
+
 //use strum::Display;
 use serde::{ Deserialize, Serialize };
 use strum_macros::{ EnumString, Display };
@@ -27,25 +32,25 @@ pub const UNCLASSIFIED_STRING: &str = "UNCLASSIFIED";
 
 #[allow(non_snake_case)]
 pub struct FieldErrorSchema {
-    fieldName: String,
-    message: String,
-    messageArguments: [String; MAX_ERROR_ARGUMENTS],
-    messageCode: String,
-    rejectedValue: String
+    fieldName:          String,
+    message:            String,
+    messageArguments:   [String; MAX_ERROR_ARGUMENTS],
+    messageCode:        String,
+    rejectedValue:      String
 }
 
 #[allow(non_snake_case)]
 pub struct ErrorCode400 {
     classification: String,
-    code: i32,
-    fieldErrors: FieldErrorSchema,
-    message: String
+    code:           i32,
+    fieldErrors:    FieldErrorSchema,
+    message:        String
 }
 
 pub struct ErrorCode404 {
     classification: String,
-    code: i32,
-    message: String
+    code:           i32,
+    message:        String
 }
 
 // =============================================================================
@@ -90,13 +95,13 @@ pub enum JoinStatus {
 #[derive(Serialize, Deserialize)]
 pub struct LocationCoordinatesSchema {
     #[serde(skip)]
-    r#type: LocationType,
+    r#type:                 LocationType,
 
     // The first entry represents the coordinates for a single point.
-    point_coordinates: [f32; COORDINATES_IN_POINT],
+    point_coordinates:      [f32; COORDINATES_IN_POINT],
     
     // The second entry represents a set of points for a polygon.
-    polygon_coordinates: [[f32; COORDINATES_IN_POINT]; POINTS_IN_POLYGON],
+    polygon_coordinates:    [[f32; COORDINATES_IN_POINT]; POINTS_IN_POLYGON],
 
 }
 
@@ -343,11 +348,11 @@ impl LocationSchema {
 #[allow(non_snake_case)]
 #[derive(Serialize, Deserialize)]
 pub struct RegionSchema {
-    pub abbreviation: String,
-    pub bounds: [f32; MAX_REGION_BOUNDS],
-    pub description: String,
-    pub name: String,
-    pub regionType: String
+    pub abbreviation:   String,
+    pub bounds:         [f32; MAX_REGION_BOUNDS],
+    pub description:    String,
+    pub name:           String,
+    pub regionType:     String
 }
 
 impl fmt::Display for RegionSchema {
@@ -468,7 +473,7 @@ pub struct ScrubbedChatMessage {
 #[derive(Serialize, Deserialize)]
 pub struct GetChatMessagesResponse {
     pub classification: String,
-    pub messages: Vec<ChatMessageSchema>
+    pub messages:       Vec<ChatMessageSchema>
 }
 
 impl fmt::Display for GetChatMessagesResponse {
@@ -478,6 +483,12 @@ impl fmt::Display for GetChatMessagesResponse {
 }
 
 impl GetChatMessagesResponse {
+    pub fn new() -> GetChatMessagesResponse {
+        GetChatMessagesResponse {
+            classification: String::from(UNCLASSIFIED_STRING),
+            messages:       Vec::new()
+        }
+    }
     pub fn to_json(&self) -> String {
         serde_json::to_string(self).unwrap()
     }
@@ -488,14 +499,14 @@ impl GetChatMessagesResponse {
 #[derive(Serialize, Deserialize)]
 pub struct ChatDomainSchema {
     classification: String,
-    id: String,
-    name: String,
-    networkId: String
+    id:             String,
+    name:           String,
+    networkId:      String
 }
 
 pub struct GetChatDomainsResponse {
     classification: String,
-    domains: [ChatDomainSchema; MAX_DOMAINS]
+    domains:        [ChatDomainSchema; MAX_DOMAINS]
 }
 
 // =============================================================================
@@ -503,29 +514,230 @@ pub struct GetChatDomainsResponse {
 
 #[allow(non_snake_case)]
 pub struct RoomSearchResponseRoomItemSchema {
-    classification: String,
-    description: String,
-    displayName: String,
-    domainAbbreviation: String,
-    domainId: String,
-    domainName: String,
-    firstJoinedDate: DateTime<Utc>,
-    firstSeenDate: DateTime<Utc>,
-    isMembersOnly: bool,
-    isPasswordProtected: bool,
-    isPersistent: bool,
-    joinStatus: JoinStatus,
-    lastJoinedDate: DateTime<Utc>,
-    lastSeenDate: DateTime<Utc>,
-    networkId: String,
-    roomName: String,
-    statusDetail: [String; MAX_STATUS_DETAILS],
-    topic: String
+    classification:         String,
+    description:            String,
+    displayName:            String,
+    domainAbbreviation:     String,
+    domainId:               String,
+    domainName:             String,
+    firstJoinedDate:        DateTime<Utc>,
+    firstSeenDate:          DateTime<Utc>,
+    isMembersOnly:          bool,
+    isPasswordProtected:    bool,
+    isPersistent:           bool,
+    joinStatus:             JoinStatus,
+    lastJoinedDate:         DateTime<Utc>,
+    lastSeenDate:           DateTime<Utc>,
+    networkId:              String,
+    roomName:               String,
+    statusDetail:           [String; MAX_STATUS_DETAILS],
+    topic:                  String
 }
 
 #[allow(non_snake_case)]
 pub struct SearchRoomsResponse {
     classification: String,
-    rooms: [RoomSearchResponseRoomItemSchema; MAX_ROOM_SEARCH_RESPONSE_ITEMS],
+    rooms:          [RoomSearchResponseRoomItemSchema; MAX_ROOM_SEARCH_RESPONSE_ITEMS],
     totalRoomCount: i64
+}
+
+// =============================================================================
+// struct KeywordFilter
+// =============================================================================
+#[derive(Serialize, Deserialize)]
+pub struct KeywordFilter {
+    pub query: String
+}
+
+/*
+ * Implement the trait fmt::Display for the struct KeywordFilter
+ * so that these structs can be easily printed to consoles.
+ */
+impl fmt::Display for KeywordFilter {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.to_json())
+    }
+}
+
+impl KeywordFilter {
+    /*
+     * This method constructs a JSON string from the KeywordFilter's
+     * fields.
+     */
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).unwrap()
+    }
+}
+
+// =============================================================================
+// struct TimeFilter
+// =============================================================================
+/*
+ * This struct contains fields that can be used as filters when searching
+ * for chat messages within a ChatSurfer chat room.
+ * 
+ * Each field in this struct is considered an optional parameter from
+ * ChatSurfer's perspective.  So when determining the validity of a search
+ * request, these fields should be allowed to be ignored.
+ */
+#[derive(Serialize, Deserialize)]
+pub struct TimeFilter {
+    endDateTime:        String, //This string needs to be in DateTime format.
+    lookBackDuration:   String,
+    startDateTime:      String, //This string needs to be in DateTime format.
+}
+
+impl Default for TimeFilter {
+    fn default() -> Self {
+        TimeFilter {
+            endDateTime: String::new(),
+            lookBackDuration: String::new(),
+            startDateTime: String::new(),
+        }
+    }
+}
+
+/*
+ * Implement the trait fmt::Display for the struct TimeFilter
+ * so that these structs can be easily printed to consoles.
+ */
+impl fmt::Display for TimeFilter {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.to_json())
+    }
+}
+
+impl TimeFilter {
+    pub fn is_valid(&self) -> bool {
+        let valid_end = match self.endDateTime.parse::<DateTime<Utc>>() {
+            Ok(_) => true,
+            Err(_) => false
+        };
+
+        let valid_start = match self.startDateTime.parse::<DateTime<Utc>>() {
+            Ok(_) => true,
+            Err(_) => false
+        };
+
+        #[allow(unused_braces)]
+        (valid_end && valid_start)
+    }
+
+    /*
+     * This method constructs a JSON string from the TimeFilter's
+     * fields.
+     */
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).unwrap()
+    }
+}
+
+// =============================================================================
+// struct RoomFilter
+// =============================================================================
+#[derive(Serialize, Deserialize)]
+struct RoomFilterDomainProperties {
+    properties: Vec<String>,
+}
+
+impl RoomFilterDomainProperties {
+    pub fn from_vec(new_properties: Vec<String>) -> RoomFilterDomainProperties {
+        RoomFilterDomainProperties {
+            properties: new_properties
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct RoomFilter {
+    domains: HashMap<String, RoomFilterDomainProperties>,
+}
+
+impl RoomFilter {
+    // pub fn add_domain
+    // (
+    //     &self,
+    //     domainId:   &str,
+    //     names:      Vec<String>
+    // ) {
+    //     self.domains.insert(String::from(domainId), names);
+    // }
+
+    // pub fn new() -> RoomFilter {
+    //     RoomFilter {
+    //         domains:    HashMap::new(),
+    //     }
+    // }
+}
+
+// =============================================================================
+// struct SearchChatMessagesRequest
+// =============================================================================
+#[derive(Serialize, Deserialize)]
+pub struct SearchChatMessagesRequest {
+    pub keywordFilter:  KeywordFilter,
+    pub limit:          i32,
+    //roomFilter:     RoomFilter,
+    //pub timeFilter:     TimeFilter,
+}
+
+/*
+ * Implement the trait fmt::Display for the struct SearchChatMessagesRequest
+ * so that these structs can be easily printed to consoles.
+ */
+impl fmt::Display for SearchChatMessagesRequest {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.to_json())
+    }
+}
+
+impl SearchChatMessagesRequest {
+    
+    pub fn from_string(json: String) -> SearchChatMessagesRequest {
+        serde_json::from_str(&json.as_str()).unwrap()
+    }
+    
+    pub fn from_str(json: &str) -> SearchChatMessagesRequest {
+        serde_json::from_str(json).unwrap()
+    }
+
+    /*
+     * This method constructs a JSON string from the SearchChatMessagesRequest's
+     * fields.
+     */
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).unwrap()
+    }
+}
+
+// =============================================================================
+// struct SearchChatMessagesResponse
+// =============================================================================
+#[derive(Serialize, Deserialize)]
+pub struct SearchChatMessagesResponse {
+    pub classification:     String,
+    pub messages:           Vec<ChatMessageSchema>,
+    pub nextCursorMark:     String,
+    pub searchTimeFiler:    TimeFilter,
+    pub total:              i32,
+}
+
+/*
+ * Implement the trait fmt::Display for the struct SearchChatMessagesResponse
+ * so that these structs can be easily printed to consoles.
+ */
+impl fmt::Display for SearchChatMessagesResponse {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.to_json())
+    }
+}
+
+impl SearchChatMessagesResponse {
+    /*
+     * This method constructs a JSON string from the
+     * SearchChatMessagesResponse's fields.
+     */
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).unwrap()
+    }
 }

@@ -21,9 +21,7 @@ use url::Url;
 
 mod messages;
 use messages::{
-    GetMessagesRequest,
-    GetUsersRequest,
-    SearchMessagesRequest,
+    GetMessagesRequest, GetUsersRequest, GetUsersResponse, SearchMessagesRequest
 };
 
 mod ChatSurfer;
@@ -85,68 +83,69 @@ fn main() {
     while loop_count < LOOP_LIMIT {
         //======================================================================
         // Get Messages Endpoint
-        messages_socket.write_message(Message::Text(build_messages_request())).unwrap();
+        // messages_socket.write_message(Message::Text(build_messages_request())).unwrap();
 
-        while messages_response_received == false {
-            event!(Level::DEBUG, "Attempting to read response from Messages endpoint:");
+        // while messages_response_received == false {
+        //     event!(Level::DEBUG, "Attempting to read response from Messages endpoint:");
     
-            match messages_socket.read_message() {
-                Ok(message) => {
-                    let response = message.to_text();
-
-                    match response {
-                        Ok(get_messages_request) => {
-                            let response: cs_messages::GetChatMessagesResponse = serde_json::from_str(get_messages_request).unwrap();
-                            let pretty_json = serde_json::to_string_pretty(&response).unwrap();
-
-                            //let pretty_json = serde_json::to_string(&get_messages_request).unwrap();
-                            event!(Level::DEBUG, "Received from server: {}", pretty_json);
-                        }
-                        _ => {
-                            event!(Level::DEBUG, "Invalid response received.");
-                        }
-                    }
-                    messages_response_received = true;                    
-                },
-                Err(error) => event!(Level::DEBUG, "Error receiving message: {}", error),
-            };
-        }
-        messages_response_received = false;
-
-        //======================================================================
-        // Get Users Endpoint
-        users_socket.write_message(Message::Text(get_users_message())).unwrap();
-
-        while user_response_received == false {
-            event!(Level::DEBUG, "Attempting to read response from Users endpoint:");
-    
-            match users_socket.read_message() {
-                Ok(message) => {
-                    event!(Level::DEBUG, "Received from server: {}", message);
-                    user_response_received = true;
-                },
-                Err(error) => event!(Level::DEBUG, "Error receiving message: {}", error),
-            };
-        }
-        user_response_received = false;
-
-        
-        //======================================================================
-        // Search Messages Endpoint
-        // search_messages_socket.write_message(Message::Text(build_search_messages_request())).unwrap();
-
-        // while search_messages_response_received == false {
-        //     event!(Level::DEBUG, "Attempting to read response from Search Messages endpoint:");
-    
-        //     match search_messages_socket.read_message() {
+        //     match messages_socket.read_message() {
         //         Ok(message) => {
-        //             event!(Level::DEBUG, "Received from server: {}", message);
-        //             search_messages_response_received = true;
+        //             let response = message.to_text();
+
+        //             match response {
+        //                 Ok(get_messages_request) => {
+        //                     let response: cs_messages::GetChatMessagesResponse = serde_json::from_str(get_messages_request).unwrap();
+        //                     let pretty_json = serde_json::to_string_pretty(&response).unwrap();
+
+        //                     //let pretty_json = serde_json::to_string(&get_messages_request).unwrap();
+        //                     event!(Level::DEBUG, "Received from server: {}", pretty_json);
+        //                 }
+        //                 _ => {
+        //                     event!(Level::DEBUG, "Invalid response received.");
+        //                 }
+        //             }
+        //             messages_response_received = true;                    
         //         },
         //         Err(error) => event!(Level::DEBUG, "Error receiving message: {}", error),
         //     };
         // }
-        // search_messages_response_received = false;
+        // messages_response_received = false;
+
+        //======================================================================
+        // Get Users Endpoint
+        // users_socket.write_message(Message::Text(get_users_message())).unwrap();
+        // let mut user_response: GetUsersResponse;
+
+        // while user_response_received == false {
+        //     event!(Level::DEBUG, "Attempting to read response from Users endpoint:");
+    
+        //     match users_socket.read_message() {
+        //         Ok(message) => {
+        //             user_response = serde_json::from_str(message.to_text().unwrap()).unwrap();
+        //             event!(Level::DEBUG, "Received from server: {}", user_response);
+        //             user_response_received = true;
+        //         },
+        //         Err(error) => event!(Level::DEBUG, "Error receiving message: {}", error),
+        //     };
+        // }
+        // user_response_received = false;
+        
+        //======================================================================
+        //Search Messages Endpoint
+        search_messages_socket.write_message(Message::Text(build_search_messages_request())).unwrap();
+
+        while search_messages_response_received == false {
+            event!(Level::DEBUG, "Attempting to read response from Search Messages endpoint:");
+    
+            match search_messages_socket.read_message() {
+                Ok(message) => {
+                    event!(Level::DEBUG, "Received from server: {}", message);
+                    search_messages_response_received = true;
+                },
+                Err(error) => event!(Level::DEBUG, "Error receiving message: {}", error),
+            };
+        }
+        search_messages_response_received = false;
 
         loop_count += 1;
     }
@@ -160,17 +159,4 @@ fn main() {
         Ok(_) => event!(Level::DEBUG, "Successfully closed the WebSocket!"),
         Err(error) => event!(Level::DEBUG, "Error closing the WebSocket: {}", error),
     }
-
-        
-        // messages_socket.write_message(Message::Text("Hello Messages!".into())).unwrap();
-
-        // while messages_response_received == false {
-        //     let messages_msg: Message = socket.read_message().expect("Error reading message from Messages endpoint");
-
-
-        //     event!(Level::DEBUG, "Received from Messages endpoint: {}", messages_msg);
-        // }
-        // messages_response_received = false;
-
-
 }
