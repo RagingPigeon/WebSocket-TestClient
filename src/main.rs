@@ -68,9 +68,9 @@ fn main() {
     let mut messages_response_received: bool = false;
     let mut search_messages_response_received: bool = false;
 
-    let users_url = Url::parse("wss://localhost:3030/users").unwrap();
-    let messages_url = Url::parse("wss://localhost:3030/messages").unwrap();
-    let search_messages_url = Url::parse("wss://localhost:3030/search").unwrap();
+    let users_url = Url::parse("wss://localhost:7878/users").unwrap();
+    let messages_url = Url::parse("wss://localhost:7878/messages").unwrap();
+    let search_messages_url = Url::parse("wss://localhost:7878/search").unwrap();
 
     // Connect to the WebSocket.
     let (mut users_socket, response) = connect(users_url).expect("Can't connect");
