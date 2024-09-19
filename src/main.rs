@@ -69,15 +69,18 @@ fn main() {
     let mut search_messages_response_received: bool = false;
 
     let users_url = Url::parse("wss://localhost:7878/users").unwrap();
+    //let users_url = Url::parse("wss://aac90a4180f5e47b9ba591836c7f4829-839660979210620c.elb.us-gov-west-1.amazonaws.com:7878/users").unwrap();
     let messages_url = Url::parse("wss://localhost:7878/messages").unwrap();
+    //let messages_url = Url::parse("wss://aac90a4180f5e47b9ba591836c7f4829-839660979210620c.elb.us-gov-west-1.amazonaws.com/messages").unwrap();
     let search_messages_url = Url::parse("wss://localhost:7878/search").unwrap();
+    //let search_messages_url = Url::parse("wss://aac90a4180f5e47b9ba591836c7f4829-839660979210620c.elb.us-gov-west-1.amazonaws.com/search").unwrap();
 
     // Connect to the WebSocket.
     let (mut users_socket, response) = connect(users_url).expect("Can't connect");
 
-    let (mut messages_socket, messages_response) = connect(messages_url).expect("Can't connect");
+    //let (mut messages_socket, messages_response) = connect(messages_url).expect("Can't connect");
 
-    let (mut search_messages_socket, search_messages_response) = connect(search_messages_url).expect("Can't connect");
+    //let (mut search_messages_socket, search_messages_response) = connect(search_messages_url).expect("Can't connect");
 
     // High level loop to iterate over each endpoint we're testing.
     while loop_count < LOOP_LIMIT {
@@ -113,39 +116,39 @@ fn main() {
 
         //======================================================================
         // Get Users Endpoint
-        // users_socket.write_message(Message::Text(get_users_message())).unwrap();
-        // let mut user_response: GetUsersResponse;
+        users_socket.write_message(Message::Text(get_users_message())).unwrap();
+        let mut user_response: GetUsersResponse;
 
-        // while user_response_received == false {
-        //     event!(Level::DEBUG, "Attempting to read response from Users endpoint:");
+        while user_response_received == false {
+            event!(Level::DEBUG, "Attempting to read response from Users endpoint:");
     
-        //     match users_socket.read_message() {
-        //         Ok(message) => {
-        //             user_response = serde_json::from_str(message.to_text().unwrap()).unwrap();
-        //             event!(Level::DEBUG, "Received from server: {}", user_response);
-        //             user_response_received = true;
-        //         },
-        //         Err(error) => event!(Level::DEBUG, "Error receiving message: {}", error),
-        //     };
-        // }
-        // user_response_received = false;
-        
-        //======================================================================
-        //Search Messages Endpoint
-        search_messages_socket.write_message(Message::Text(build_search_messages_request())).unwrap();
-
-        while search_messages_response_received == false {
-            event!(Level::DEBUG, "Attempting to read response from Search Messages endpoint:");
-    
-            match search_messages_socket.read_message() {
+            match users_socket.read_message() {
                 Ok(message) => {
-                    event!(Level::DEBUG, "Received from server: {}", message);
-                    search_messages_response_received = true;
+                    user_response = serde_json::from_str(message.to_text().unwrap()).unwrap();
+                    event!(Level::DEBUG, "Received from server: {}", user_response);
+                    user_response_received = true;
                 },
                 Err(error) => event!(Level::DEBUG, "Error receiving message: {}", error),
             };
         }
-        search_messages_response_received = false;
+        user_response_received = false;
+        
+        //======================================================================
+        //Search Messages Endpoint
+        // search_messages_socket.write_message(Message::Text(build_search_messages_request())).unwrap();
+
+        // while search_messages_response_received == false {
+        //     event!(Level::DEBUG, "Attempting to read response from Search Messages endpoint:");
+    
+        //     match search_messages_socket.read_message() {
+        //         Ok(message) => {
+        //             event!(Level::DEBUG, "Received from server: {}", message);
+        //             search_messages_response_received = true;
+        //         },
+        //         Err(error) => event!(Level::DEBUG, "Error receiving message: {}", error),
+        //     };
+        // }
+        // search_messages_response_received = false;
 
         loop_count += 1;
     }
