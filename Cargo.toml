@@ -5,11 +5,15 @@ edition = "2021"
 
 [dependencies]
 chrono = "0.4.38"
+futures = "0.3.30"
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
 http = "0.2.9"
 serde = { version = "1.0.119", features = ["derive"] }
 serde_json = "1"
 strum = "0.26"
 strum_macros = "0.26"
+tokio = { version = "1.4", features = ["rt-multi-thread", "macros"] }
+tokio-tungstenite = { version = "0.23.1", features = ["connect", "stream", "handshake", "default", "native-tls-crate", "native-tls-vendored", "rustls", "rustls-native-certs", "rustls-pki-types", "rustls-tls-native-roots", "webpki-roots", "url", ] }
 tracing = "0.1.4"
 tracing-subscriber = "0.3.18"
 tungstenite = "0.16.0"

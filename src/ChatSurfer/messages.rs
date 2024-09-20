@@ -1,11 +1,10 @@
 use std::{
     collections::HashMap,
     fmt,
-    panic::Location,
-    str::FromStr
 };
 
-use chrono::{ Date, DateTime, Utc };
+use chrono::{ DateTime, Utc };
+use http::status;
 
 //use strum::Display;
 use serde::{ Deserialize, Serialize };
@@ -27,10 +26,14 @@ const MAX_ROOM_SEARCH_RESPONSE_ITEMS: usize = 100;
 // Classification strings
 pub const UNCLASSIFIED_STRING: &str = "UNCLASSIFIED";
 
+
+pub const HTTP_CREATE_MESSAGE_URL: &str = "/api/chatserver/messages";
+
 // =============================================================================
 // Error Messages
 
 #[allow(non_snake_case)]
+#[derive(Serialize, Deserialize)]
 pub struct FieldErrorSchema {
     fieldName:          String,
     message:            String,
@@ -40,10 +43,11 @@ pub struct FieldErrorSchema {
 }
 
 #[allow(non_snake_case)]
+#[derive(Serialize, Deserialize)]
 pub struct ErrorCode400 {
     classification: String,
     code:           i32,
-    fieldErrors:    FieldErrorSchema,
+    fieldErrors:    Vec<FieldErrorSchema>,
     message:        String
 }
 
@@ -740,4 +744,65 @@ impl SearchChatMessagesResponse {
     pub fn to_json(&self) -> String {
         serde_json::to_string(self).unwrap()
     }
+}
+
+// =============================================================================
+// struct SendChatMessageRequest
+// =============================================================================
+#[derive(Serialize, Deserialize)]
+pub struct SendChatMessageRequest {
+    pub classification: String,
+    pub domainId:       String,
+    pub message:        String,
+    pub nickname:       String,
+    pub roomName:       String
+}
+
+/*
+ * Implement the trait Default for the struct SendChatMessageRequest
+ * so that we can fall back on default values.
+ */
+impl Default for SendChatMessageRequest {
+    fn default() -> SendChatMessageRequest {
+        SendChatMessageRequest {
+            classification: String::from(UNCLASSIFIED_STRING),
+            domainId:       String::new(),
+            message:        String::new(),
+            nickname:       String::from("Edge View"),
+            roomName:       String::new()
+        }
+    }
+}
+
+/*
+ * Implement the trait fmt::Display for the struct SendChatMessageRequest
+ * so that these structs can be easily printed to consoles.
+ */
+impl fmt::Display for SendChatMessageRequest {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.to_json())
+    }
+}
+
+impl SendChatMessageRequest {
+    /*
+     * This constant represents the HTTP status code that ChatSurfer returns
+     * upon a successful Create Chat Message operation.
+     */
+    pub const SUCCESSFUL: http::status::StatusCode = status::StatusCode::NO_CONTENT;
+
+    /*
+     * This method constructs a JSON string from the
+     * SendChatMessageRequest's fields.
+     */
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).unwrap()
+    }
+} //end SendChatMessageRequest
+
+#[derive(Serialize, Deserialize)]
+pub enum CreateMessageResponse {
+    Success204(),
+    Failure400(ErrorCode400),
+    Failure429()
 }
