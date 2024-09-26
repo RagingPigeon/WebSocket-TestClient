@@ -1,9 +1,107 @@
+use jsonwebtoken::{
+    Algorithm,
+    encode,
+    EncodingKey,
+    Header,
+};
 use serde::{ Deserialize, Serialize };
 use std::fmt;
+use uuid::Uuid;
 
-pub const TOPIC_USERS: &str = "users";
-pub const TOPIC_MESSAGES: &str = "messages";
-pub const TOPIC_SEARCH_MESSAGES: &str = "search";
+pub const TOPIC_USERS: &str = "/users";
+pub const TOPIC_MESSAGES: &str = "/messages";
+pub const TOPIC_SEARCH_MESSAGES: &str = "/search";
+pub const TOPIC_SEND_MESSAGE: &str = "/send";
+
+//==============================================================================
+// struct Edge View JWT Token definitions
+//==============================================================================
+#[allow(non_snake_case)]
+pub struct EdgeViewJWTHeader {
+    pub alg:    Algorithm,
+    pub typ:    String,
+}
+
+impl EdgeViewJWTHeader {
+    pub fn new() -> EdgeViewJWTHeader {
+        EdgeViewJWTHeader {
+            alg:    Algorithm::HS256,
+            typ:    "JWT".to_string(),
+        }
+    }
+
+    pub fn to_header(&self) -> Header {
+        let mut new_header = Header::new(self.alg);
+        new_header.typ = Some(self.typ.clone());
+
+        new_header
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RealmAccess {
+    pub roles:  Vec<String>
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RealmManagement {
+    pub roles:  Vec<String>
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Account {
+    pub roles:  Vec<String>
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResourceAccess {
+    pub realm_management:   RealmManagement,
+    pub account:            Account,
+}
+
+#[allow(non_snake_case)]
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EdgeViewClaims {
+    // Expiration time in seconds.
+    pub exp:                u64,
+    // Issued at time in seconds.
+    pub iat:                u64,
+    // Time when authentication occurred in seconds.
+    pub auth_time:          u64,
+    // JTI is a UUID to indicate against replay attacks.
+    pub jti:                String,
+    // Token issuer, who created the token.
+    pub iss:                String,
+    // Audience, who the token is intended for.
+    pub aud:                Option<Vec<String>>,
+    // Subject, whom the token refers to.
+    pub sub:                String,
+    pub typ:                String,
+    // Authorized party, the party to which this token was issued.
+    pub azp:                String,
+    pub nonce:              String,
+    pub session_state:      String,
+    pub acr:                String,
+    pub allowed_origins:    Vec<String>,
+    pub realm_access:       RealmAccess,
+    pub resource_access:    ResourceAccess,
+    pub scope:              String,
+    pub sid:                Uuid,
+    pub email_verified:     bool,
+    pub name:               String,
+    pub preferred_username: String,
+    pub given_name:         String,
+    pub family_name:        String,
+    pub email:              String,
+}
+
+impl fmt::Display for EdgeViewClaims {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", serde_json::to_string(self).unwrap())
+    }
+}
+
+
 
 //==============================================================================
 // struct GetMessagesRequest
@@ -152,6 +250,7 @@ impl GetUsersResponse {
 //==============================================================================
 // struct SendNewMessageRequest
 //==============================================================================
+#[allow(non_snake_case)]
 #[derive(Serialize, Deserialize)]
 pub struct SendNewMessageRequest {
     pub domainId:   String,
@@ -178,7 +277,9 @@ impl SendNewMessageRequest {
 
     pub fn new() -> SendNewMessageRequest {
         SendNewMessageRequest {
-            text: String::new()
+            domainId:   String::new(),
+            roomName:   String::new(),
+            text:       String::new()
         }
     }
 

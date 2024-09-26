@@ -11,7 +11,7 @@ use serde::{ Deserialize, Serialize };
 use strum_macros::{ EnumString, Display };
 use uuid::Uuid;
 
-const MAX_ERROR_ARGUMENTS: usize = 5;
+const MAX_ERROR_ARGUMENTS: usize = 1;
 pub const DECIMAL_PLACES_IN_COORDINATE: usize = 2;
 pub const DECIMAL_PLACES_IN_REGION_BOUNDS: usize = 2;
 const COORDINATES_IN_POINT: usize = 2;
@@ -27,7 +27,7 @@ const MAX_ROOM_SEARCH_RESPONSE_ITEMS: usize = 100;
 pub const UNCLASSIFIED_STRING: &str = "UNCLASSIFIED";
 
 
-pub const HTTP_CREATE_MESSAGE_URL: &str = "/api/chatserver/messages";
+pub const HTTP_CREATE_MESSAGE_URL: &str = "/api/chatserver/message";
 
 // =============================================================================
 // Error Messages
@@ -35,20 +35,69 @@ pub const HTTP_CREATE_MESSAGE_URL: &str = "/api/chatserver/messages";
 #[allow(non_snake_case)]
 #[derive(Serialize, Deserialize)]
 pub struct FieldErrorSchema {
-    fieldName:          String,
-    message:            String,
-    messageArguments:   [String; MAX_ERROR_ARGUMENTS],
-    messageCode:        String,
-    rejectedValue:      String
+    pub fieldName:          String,
+    pub message:            String,
+    pub messageArguments:   [String; MAX_ERROR_ARGUMENTS],
+    pub messageCode:        String,
+    pub rejectedValue:      String
+}
+
+impl Default for FieldErrorSchema {
+    fn default() -> Self {
+        FieldErrorSchema {
+            fieldName:          String::new(),
+            message:            String::new(),
+            messageArguments:   [String::new()],
+            messageCode:        String::new(),
+            rejectedValue:      String::new(),
+        }
+    }
+}
+
+impl FieldErrorSchema {
+    
 }
 
 #[allow(non_snake_case)]
 #[derive(Serialize, Deserialize)]
 pub struct ErrorCode400 {
-    classification: String,
-    code:           i32,
-    fieldErrors:    Vec<FieldErrorSchema>,
-    message:        String
+    pub classification: String,
+    pub code:           i32,
+    pub fieldErrors:    Vec<FieldErrorSchema>,
+    pub message:        String
+}
+
+impl Default for ErrorCode400 {
+    fn default() -> Self {
+        ErrorCode400 {
+            classification: String::from(UNCLASSIFIED_STRING),
+            code:           400,
+            fieldErrors:    Vec::new(),
+            message:        String::from("Bad Request"),
+        }
+    }
+}
+
+/*
+ * Implement the trait fmt::Display for the struct SearchChatMessagesResponse
+ * so that these structs can be easily printed to consoles.
+ */
+impl fmt::Display for ErrorCode400 {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.to_json())
+    }
+}
+
+impl ErrorCode400 {
+    
+
+    /*
+     * This method constructs a JSON string from the
+     * ErrorCode400's fields.
+     */
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).unwrap()
+    }
 }
 
 pub struct ErrorCode404 {
@@ -59,6 +108,9 @@ pub struct ErrorCode404 {
 
 // =============================================================================
 // General Messages
+pub struct ChatSurferFailure {
+
+}
 
 /// This enum lists the possible values for a Domain's network ID.
 #[derive(Debug, PartialEq, EnumString, Display)]
@@ -790,6 +842,14 @@ impl SendChatMessageRequest {
      * upon a successful Create Chat Message operation.
      */
     pub const SUCCESSFUL: http::status::StatusCode = status::StatusCode::NO_CONTENT;
+    
+    pub fn from_string(json: String) -> SendChatMessageRequest {
+        serde_json::from_str(&json.as_str()).unwrap()
+    }
+    
+    pub fn from_str(json: &str) -> SendChatMessageRequest {
+        serde_json::from_str(json).unwrap()
+    }
 
     /*
      * This method constructs a JSON string from the
@@ -802,7 +862,27 @@ impl SendChatMessageRequest {
 
 #[derive(Serialize, Deserialize)]
 pub enum CreateMessageResponse {
-    Success204(),
-    Failure400(ErrorCode400),
-    Failure429()
+    Success204 { status_code: u16 },
+    Failure400 { error: ErrorCode400 },
+    Failure429 { status_code: u16 }
+}
+
+impl fmt::Display for CreateMessageResponse {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            CreateMessageResponse::Success204 { status_code } => write!(f, "{}", status_code),
+            CreateMessageResponse::Failure400 { error } => {
+                write!(f, "{}", error)
+            },
+            CreateMessageResponse::Failure429 { status_code } => {
+                write!(f, "{}", status_code)
+            }
+        }
+    }
+}
+
+impl CreateMessageResponse {
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).unwrap()
+    }
 }
