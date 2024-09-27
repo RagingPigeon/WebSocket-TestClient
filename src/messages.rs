@@ -1,3 +1,4 @@
+use crate::ChatSurfer::messages::ChatMessageSchema;
 use jsonwebtoken::{
     Algorithm,
     encode,
@@ -165,6 +166,14 @@ impl SearchMessagesRequest {
     pub fn from_str(json: &str) -> SearchMessagesRequest {
         serde_json::from_str(json).unwrap()
     }
+}
+
+//==============================================================================
+// struct SearchMessagesResponse
+//==============================================================================
+#[derive(Serialize, Deserialize)]
+pub struct SearchMessagesResponse {
+    pub messages:   Vec<ChatMessageSchema>,
 }
 
 //==============================================================================

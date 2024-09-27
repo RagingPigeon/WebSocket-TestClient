@@ -79,8 +79,8 @@ fn get_users_message() -> String {
 
 fn build_messages_request() -> String {
     let messages_request: GetMessagesRequest = GetMessagesRequest {
-        domainId: String::from("somedomain"),
-        roomName: String::from("Test_Room")
+        domainId: String::from(TEST_DOMAIN),
+        roomName: String::from(TEST_ROOM),
     };
 
     serde_json::to_string(&messages_request).unwrap()
@@ -88,13 +88,13 @@ fn build_messages_request() -> String {
 
 fn build_search_messages_request() -> String {
     let request: SearchMessagesRequest = SearchMessagesRequest {
-        domainId: String::from("somedomain"),
-        roomName: String::from("Test_Room"),
+        domainId: String::from(TEST_DOMAIN),
+        roomName: String::from(TEST_ROOM),
         keywords: vec!(String::from("test_keyword"), String::from("Austin")),
     };
 
     serde_json::to_string(&request).unwrap()
-}
+} // end build_search_messages_request
 
 fn build_new_message_request() -> String {
     let request: SendNewMessageRequest = SendNewMessageRequest {
@@ -156,7 +156,7 @@ fn build_jwt(alg: Algorithm) -> String {
     let jwt = encode(
         &header,
         &claims,
-        &EncodingKey::from_secret("secret".as_ref())).unwrap();
+        &EncodingKey::from_secret("MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzq/jsj5MTmOA9sW4YBJpv16yLPvznKLj3UqNXQ17WhukP5wu6GQyHMUSqNV8CAqGEA8TJpoQcpTCs8iaKxpfF1yORKdeuvCa/aJZpOw6TwsJZa1OWLONyJnOuPeZZNDUn+D7as+tS9ws7UP3AtROO8hkMS7+B3C90eXTWhZnkzEDSfDmfUxPMvYH/5yGUI4AtzbAGPMwiDOXOguXUSkV5TP7RXTZqrgHp3yvzBsbaWtjW9r4tfzXRHuGFXhlEgBdsBIzupaXrpfqIjHQXDhJ1NnI6KOQUTDi5t3VOhfZ8z6WXMPdqi/pvyzTenAshvoTR2rEti6KyLqwTdW6y1KFVQIDAQAB".as_ref())).unwrap();
 
     jwt
 } // end build_jwt
@@ -273,13 +273,33 @@ async fn test_get_messages() {
             event!(Level::ERROR, "Get Messages Test Failed!");
         }
     }
-}
+} // end test_get_messages
+
+async fn test_search_messages() {
+    let response = ws_connect_send(
+        7878,
+        Algorithm::HS256,
+        "/search",
+        build_search_messages_request()).await;
+
+    match response {
+        Some(payload) => {
+
+            event!(Level::DEBUG, "{}", payload);
+            event!(Level::INFO, "Search Messages Test passed!");
+        }
+        None => {
+            event!(Level::DEBUG, "No response received.");
+            event!(Level::ERROR, "Search Messages Test Failed!");
+        }
+    }
+} // end test_search_messages
 
 #[tokio::main]
 async fn main() {
     // Set up the logging subscriber.
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
+        .with_max_level(tracing::Level::INFO)
         .init();
 
     let mut loop_count: i32 = 0;
@@ -306,6 +326,10 @@ async fn main() {
     //======================================================================
     // Get Messages Endpoint
     test_get_messages().await;
+
+    //======================================================================
+    // Search Messages Endpoint
+    test_search_messages().await;
     
     // High level loop to iterate over each endpoint we're testing.
     while loop_count < LOOP_LIMIT {
@@ -326,8 +350,7 @@ async fn main() {
         
         
         
-        //======================================================================
-        //Search Messages Endpoint
+        
         // search_messages_socket.write_message(Message::Text(build_search_messages_request())).unwrap();
 
         // while search_messages_response_received == false {

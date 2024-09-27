@@ -597,6 +597,12 @@ pub struct SearchRoomsResponse {
     totalRoomCount: i64
 }
 
+// #############################################################################
+// #############################################################################
+//                          Search Chat Messages Data
+// #############################################################################
+// #############################################################################
+
 // =============================================================================
 // struct KeywordFilter
 // =============================================================================
@@ -626,90 +632,47 @@ impl KeywordFilter {
 }
 
 // =============================================================================
-// struct TimeFilter
+// struct MentionFilter
 // =============================================================================
-/*
- * This struct contains fields that can be used as filters when searching
- * for chat messages within a ChatSurfer chat room.
- * 
- * Each field in this struct is considered an optional parameter from
- * ChatSurfer's perspective.  So when determining the validity of a search
- * request, these fields should be allowed to be ignored.
- */
 #[derive(Serialize, Deserialize)]
-pub struct TimeFilter {
-    endDateTime:        String, //This string needs to be in DateTime format.
-    lookBackDuration:   String,
-    startDateTime:      String, //This string needs to be in DateTime format.
+pub enum MentionType {
+    USER,
 }
 
-impl Default for TimeFilter {
-    fn default() -> Self {
-        TimeFilter {
-            endDateTime: String::new(),
-            lookBackDuration: String::new(),
-            startDateTime: String::new(),
-        }
-    }
+#[derive(Serialize, Deserialize)]
+pub struct Mention {
+    pub mentionType:    MentionType,
+    pub value:          String,
 }
 
-/*
- * Implement the trait fmt::Display for the struct TimeFilter
- * so that these structs can be easily printed to consoles.
- */
-impl fmt::Display for TimeFilter {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.to_json())
-    }
+#[derive(Serialize, Deserialize)]
+pub struct MentionFilter {
+    pub mentions:   Vec<Mention>,
 }
-
-impl TimeFilter {
-    pub fn is_valid(&self) -> bool {
-        let valid_end = match self.endDateTime.parse::<DateTime<Utc>>() {
-            Ok(_) => true,
-            Err(_) => false
-        };
-
-        let valid_start = match self.startDateTime.parse::<DateTime<Utc>>() {
-            Ok(_) => true,
-            Err(_) => false
-        };
-
-        #[allow(unused_braces)]
-        (valid_end && valid_start)
-    }
-
-    /*
-     * This method constructs a JSON string from the TimeFilter's
-     * fields.
-     */
-    pub fn to_json(&self) -> String {
-        serde_json::to_string(self).unwrap()
-    }
-}
-
 // =============================================================================
 // struct RoomFilter
 // =============================================================================
 #[derive(Serialize, Deserialize)]
-struct RoomFilterDomainProperties {
-    properties: Vec<String>,
+pub struct DomainFilterProperties {
+    pub properties: Vec<String>,
 }
 
-impl RoomFilterDomainProperties {
-    pub fn from_vec(new_properties: Vec<String>) -> RoomFilterDomainProperties {
-        RoomFilterDomainProperties {
+impl DomainFilterProperties {
+    pub fn from_vec(new_properties: Vec<String>) -> DomainFilterProperties {
+        DomainFilterProperties {
             properties: new_properties
         }
     }
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct RoomFilter {
-    domains: HashMap<String, RoomFilterDomainProperties>,
+pub struct DomainFilterDetail  {
+    // This field is a map of Domain IDs to an array of room names
+    // or sender names.
+    pub domains: HashMap<String, DomainFilterProperties>,
 }
 
-impl RoomFilter {
+impl DomainFilterDetail  {
     // pub fn add_domain
     // (
     //     &self,
@@ -727,14 +690,145 @@ impl RoomFilter {
 }
 
 // =============================================================================
+// struct SortFiler
+// =============================================================================
+#[allow(non_camel_case_types)]
+#[derive(Serialize, Deserialize)]
+#[derive(Debug, PartialEq, EnumString, Display)]
+pub enum SortDirection {
+    #[strum(serialize = "ASC")]
+    ASC,
+    #[strum(serialize = "DESC")]
+    DESC,
+}
+
+#[allow(non_camel_case_types)]
+#[derive(Serialize, Deserialize)]
+#[derive(Debug, PartialEq, EnumString, Display)]
+pub enum SortField {
+    #[strum(serialize = "DOMAIN")]
+    DOMAIN,
+    #[strum(serialize = "RELEVANCE")]
+    RELEVANCE,
+    #[strum(serialize = "ROOM")]
+    ROOM,
+    #[strum(serialize = "SENDER")]
+    SENDER,
+    #[strum(serialize = "TIME")]
+    TIME,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SortFilter {
+    pub orders: Vec<(SortDirection, SortField)>,
+}
+
+// =============================================================================
+// struct ThreadIdFilter
+// =============================================================================
+#[derive(Serialize, Deserialize)]
+pub struct ThreadIdFilter {
+    pub threadIds:  Vec<String>,
+}
+
+// =============================================================================
+// struct TimeFilterRequest
+// =============================================================================
+/*
+ * This struct contains fields that can be used as filters when searching
+ * for chat messages within a ChatSurfer chat room.
+ * 
+ * Each field in this struct is considered an optional parameter from
+ * ChatSurfer's perspective.  So when determining the validity of a search
+ * request, these fields should be allowed to be ignored.
+ */
+#[derive(Serialize, Deserialize)]
+pub struct TimeFilterRequest {
+    endDateTime:        Option<String>, //This string needs to be in DateTime format.
+    lookBackDuration:   Option<String>,
+    startDateTime:      Option<String>, //This string needs to be in DateTime format.
+}
+
+impl Default for TimeFilterRequest {
+    fn default() -> Self {
+        TimeFilterRequest {
+            endDateTime:        Some(String::new()),
+            lookBackDuration:   Some(String::new()),
+            startDateTime:      Some(String::new()),
+        }
+    }
+}
+
+/*
+ * Implement the trait fmt::Display for the struct TimeFilterRequest
+ * so that these structs can be easily printed to consoles.
+ */
+impl fmt::Display for TimeFilterRequest {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.to_json())
+    }
+}
+
+impl TimeFilterRequest {
+    /*
+     * This method constructs a JSON string from the TimeFilterRequest's
+     * fields.
+     */
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).unwrap()
+    }
+}
+
+// =============================================================================
+// struct UserIdFilter
+// =============================================================================
+#[derive(Serialize, Deserialize)]
+pub struct UserIdFilter {
+    pub userIds:    Vec<String>,
+}
+
+// =============================================================================
 // struct SearchChatMessagesRequest
 // =============================================================================
 #[derive(Serialize, Deserialize)]
 pub struct SearchChatMessagesRequest {
-    pub keywordFilter:  KeywordFilter,
-    pub limit:          i32,
-    //roomFilter:     RoomFilter,
-    //pub timeFilter:     TimeFilter,
+    pub cursor:             Option<String>,
+    pub filesOnly:          Option<bool>,
+    pub highlightResults:   Option<bool>,
+    pub keywordFilter:      Option<KeywordFilter>,
+    pub limit:              Option<i32>,
+    pub location:           Option<LocationCoordinatesSchema>,
+    pub locationFilter:     Option<bool>,
+    pub mentionFilter:      Option<MentionFilter>,
+    pub requestGeoTags:     Option<bool>,
+    pub roomFilter:         Option<DomainFilterDetail>,
+    pub senderFilter:       Option<DomainFilterDetail>,
+    pub sort:               Option<SortFilter>,
+    pub threadIdFilter:     Option<ThreadIdFilter>,
+    pub timeFilter:         Option<TimeFilterRequest>,
+    pub userIdFilter:       Option<UserIdFilter>,
+}
+
+impl Default for SearchChatMessagesRequest {
+    fn default() -> Self {
+        SearchChatMessagesRequest {
+            cursor:             None,
+            filesOnly:          None,
+            highlightResults:   None,
+            keywordFilter:      None,
+            limit:              None,
+            location:           None,
+            locationFilter:     None,
+            mentionFilter:      None,
+            requestGeoTags:     None,
+            roomFilter:         None,
+            senderFilter:       None,
+            sort:               None,
+            threadIdFilter:     None,
+            timeFilter:         None,
+            userIdFilter:       None,
+        }
+    }
 }
 
 /*
@@ -766,15 +860,30 @@ impl SearchChatMessagesRequest {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+pub enum SearchChatMessagesResponseTypes {
+    Success200 { status_code: u16, body: SearchChatMessagesResponse },
+    Failure400 { error: ErrorCode400 },
+    Failure429 { status_code: u16 }
+}
+
+// =============================================================================
+// struct TimeFilterResponse
+// =============================================================================
+#[derive(Serialize, Deserialize)]
+pub struct TimeFilterResponse {
+    pub endDateTime:    String,
+}
+
 // =============================================================================
 // struct SearchChatMessagesResponse
 // =============================================================================
 #[derive(Serialize, Deserialize)]
 pub struct SearchChatMessagesResponse {
     pub classification:     String,
-    pub messages:           Vec<ChatMessageSchema>,
-    pub nextCursorMark:     String,
-    pub searchTimeFiler:    TimeFilter,
+    pub messages:           Option<Vec<ChatMessageSchema>>,
+    pub nextCursorMark:     Option<String>,
+    pub searchTimeFiler:    TimeFilterResponse,
     pub total:              i32,
 }
 
