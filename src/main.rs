@@ -1,72 +1,43 @@
 
-// use http::{
-//     HeaderValue,
-//     Response,
-//     Request,
-// };
-use futures::stream::{
-    SplitSink,
-    SplitStream
-};
-use futures_util::{future, pin_mut, SinkExt, StreamExt};
+#[allow(non_snake_case)]
+mod ChatSurfer;
+use futures_util::{ SinkExt, StreamExt };
 use jsonwebtoken::{
     Algorithm,
-    decode,
-    DecodingKey,
     encode,
     EncodingKey,
     Header,
-    Validation,
 };
-use serde::{ Deserialize, Serialize };
+mod messages;
+use messages::{
+    Account,
+    EdgeViewClaims,
+    GetMessagesRequest,
+    GetUsersRequest,
+    RealmAccess,
+    RealmManagement,
+    ResourceAccess,
+    SearchMessagesRequest,
+    SendNewMessageRequest,
+};
 use serde_json;
-use std::{
-    fmt,
-    time,
-    borrow::Cow,
-    str::FromStr,
-};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use std::time;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
     client_async,
-    connect_async,
     tungstenite::{
-        Error,
-        Result,
         protocol::Message,
         client::IntoClientRequest,
         http::HeaderValue,
     },
-    MaybeTlsStream,
-    WebSocketStream,
-    //net::TcpStream,
 };
-use tracing::{event, span, Level};
+use tracing::{ event, Level };
 use tracing_subscriber;
-// use tungstenite::{
-//     client,
-//     connect,
-//     protocol,
-//     WebSocket,
-//     stream::MaybeTlsStream,
-    
-// };
-use url::Url;
 use uuid::Uuid;
-mod messages;
-use messages::{
-    Account, EdgeViewClaims, GetMessagesRequest, GetUsersRequest, GetUsersResponse, RealmAccess, RealmManagement, ResourceAccess, SearchMessagesRequest, SendNewMessageRequest
-};
 
-mod ChatSurfer;
-use ChatSurfer::messages as cs_messages;
 
-const LOOP_LIMIT: i32 = 1;
 const TEST_DOMAIN: &str = "chatsurferxmppunclass";
 const TEST_ROOM: &str = "Test_Room";
-
-const TEST_JWT: &str = "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJvOWl5NU0xTm5vVjB2YTF2cl9aVnRfaW9SZHRFcThaWVFYRVdPMEh6a19ZIn0.eyJleHAiOjE3MjcyMDM2OTcsImlhdCI6MTcyNzIwMzU3NywiYXV0aF90aW1lIjoxNzI3MjAzNTc2LCJqdGkiOiJlNWYzZTY1OC02MjlhLTQyZmYtYTYzZi0yMGE1MGFmYTYxZDYiLCJpc3MiOiJodHRwczovL2FwcC5mbXZlZGdldmlldy5uZXQva2V5Y2xvYWsvYXV0aC9yZWFsbXMvZm12IiwiYXVkIjpbInJlYWxtLW1hbmFnZW1lbnQiLCJhY2NvdW50Il0sInN1YiI6IjZlNGI2ZTg2LTAzMGItNDFlZC05MGFiLWMwNTMyNTUyNmEwNiIsInR5cCI6IkJlYXJlciIsImF6cCI6ImVkZ2Utdmlldy11aSIsIm5vbmNlIjoiMTI0YjU5NTItYzFjYy00MWRlLWE5ZTAtZTUzOTljNGM3M2JjIiwic2Vzc2lvbl9zdGF0ZSI6IjJmMDFhMGI4LTE4Y2MtNDJiYS1hMzkyLWQzNGNmMTdiNWI5ZCIsImFjciI6IjEiLCJhbGxvd2VkLW9yaWdpbnMiOlsiaHR0cDovLzAuMC4wLjAiLCIwLjAuMC4wIiwiaHR0cHM6Ly9hcHAuZm12ZWRnZXZpZXcubmV0IiwiaHR0cDovLzAuMC4wLjAvKiIsImxvY2FsaG9zdC8qIiwiKiIsImh0dHA6Ly9sb2NhbGhvc3QiXSwicmVhbG1fYWNjZXNzIjp7InJvbGVzIjpbInN0cmVhbSBtYW5hZ2VyIiwiYXV0aGVudGljYXRlZCB1c2VyIiwiRk1WIHVzZXIgYWRtaW4iLCJhZG1pbiIsImdyZS1ub2RlLW1hbmFnZXIiXX0sInJlc291cmNlX2FjY2VzcyI6eyJyZWFsbS1tYW5hZ2VtZW50Ijp7InJvbGVzIjpbImltcGVyc29uYXRpb24iLCJtYW5hZ2UtdXNlcnMiLCJ2aWV3LXVzZXJzIiwidmlldy1hdXRob3JpemF0aW9uIiwicXVlcnktZ3JvdXBzIiwicXVlcnktdXNlcnMiXX0sImFjY291bnQiOnsicm9sZXMiOlsibWFuYWdlLWFjY291bnQiLCJ2aWV3LWFwcGxpY2F0aW9ucyIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwiZGVsZXRlLWFjY291bnQiLCJ2aWV3LXByb2ZpbGUiXX19LCJzY29wZSI6Im9wZW5pZCBlbWFpbCBwcm9maWxlIiwic2lkIjoiMmYwMWEwYjgtMThjYy00MmJhLWEzOTItZDM0Y2YxN2I1YjlkIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsIm5hbWUiOiJKb2huIERvZSIsInByZWZlcnJlZF91c2VybmFtZSI6ImFkbWluQG5pbmVoaWxsdGVjaC5jb20iLCJnaXZlbl9uYW1lIjoiSm9obiIsImZhbWlseV9uYW1lIjoiRG9lIiwiZW1haWwiOiJhZG1pbkBuaW5laGlsbHRlY2guY29tIn0.qT9RVgggWe4-KiNgWvbVDi6zNIFhk33TbWp4hhNI20_15uXQz-B-eGuy82ybzeH0JX4d7P1hAWLXKM6Zb7WD690UyVfqYAtCA13u1dzHxE_3GzkXf4gs6vCTHGw2r2WEu0XqTZUylUl4g6jB0HQ1EUFb6ehGvtSX9KCoMKLSQYO1QtpyXW7cl0HLqRFhKt6O0zoLtb_kgIR5ccL7_eLGUlSGcg3EPatOJRdaObnytnSU2HbAPESrAFdsj-ZFVjpuNS06cB-63hZoMQqV9hTglFt8-YflsEpL0UNAiKD0efRY7I6NSRF7LXDSRT1ZMOzZxv9a7Ah2Xvi_Ftt55srOeA";
 
 fn get_users_message() -> String {
     let get_users_request: GetUsersRequest = GetUsersRequest {
@@ -90,7 +61,7 @@ fn build_search_messages_request() -> String {
     let request: SearchMessagesRequest = SearchMessagesRequest {
         domainId: String::from(TEST_DOMAIN),
         roomName: String::from(TEST_ROOM),
-        keywords: vec!(String::from("test_keyword"), String::from("Austin")),
+        keywords: vec!(String::from("test_keyword")),
     };
 
     serde_json::to_string(&request).unwrap()
@@ -200,7 +171,10 @@ async fn ws_connect_send
 
                     match response {
                         Ok(payload) => Some(payload),
-                        Err(e) => None
+                        Err(e) => {
+                            event!(Level::ERROR, "{}", e);
+                            None
+                        }
                     }
                 }
                 None => None
@@ -299,21 +273,8 @@ async fn test_search_messages() {
 async fn main() {
     // Set up the logging subscriber.
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
+        .with_max_level(tracing::Level::DEBUG)
         .init();
-
-    let mut loop_count: i32 = 0;
-    let mut search_messages_response_received: bool = false;
-
-    let search_messages_url = Url::parse("wss://localhost:7878/search").unwrap();
-    //let search_messages_url = Url::parse("wss://aac90a4180f5e47b9ba591836c7f4829-839660979210620c.elb.us-gov-west-1.amazonaws.com/search").unwrap();
-
-
-    // Connect to the WebSocket.
-
-    //let (mut messages_socket, messages_response) = connect(messages_url).expect("Can't connect");
-
-    //let (mut search_messages_socket, search_messages_response) = connect(search_messages_url).expect("Can't connect");
 
     //======================================================================
     // Send New Message Endpoint
@@ -330,54 +291,4 @@ async fn main() {
     //======================================================================
     // Search Messages Endpoint
     test_search_messages().await;
-    
-    // High level loop to iterate over each endpoint we're testing.
-    while loop_count < LOOP_LIMIT {
-        
-        
-    
-        //     match messages_socket.read_message() {
-        //         Ok(message) => {
-        //             let response = message.to_text();
-
-        //             match response {
-        //                 Ok(get_messages_request) => {
-        //                     let response: cs_messages::GetChatMessagesResponse = serde_json::from_str(get_messages_request).unwrap();
-        //                     let pretty_json = serde_json::to_string_pretty(&response).unwrap();
-
-        //                     //let pretty_json = serde_json::to_string(&get_messages_request).unwrap();
-        //                     event!(Level::DEBUG, "Received from server: {}", pretty_json);
-        
-        
-        
-        
-        // search_messages_socket.write_message(Message::Text(build_search_messages_request())).unwrap();
-
-        // while search_messages_response_received == false {
-        //     event!(Level::DEBUG, "Attempting to read response from Search Messages endpoint:");
-    
-        //     match search_messages_socket.read_message() {
-        //         Ok(message) => {
-        //             event!(Level::DEBUG, "Received from server: {}", message);
-        //             search_messages_response_received = true;
-        //         },
-        //         Err(error) => event!(Level::DEBUG, "Error receiving message: {}", error),
-        //     };
-        // }
-        // search_messages_response_received = false;
-
-        
-
-        loop_count += 1;
-    }
-
-    // let closing_code: Option<protocol::frame::CloseFrame> = Some(protocol::frame::CloseFrame {
-    //     code: protocol::frame::coding::CloseCode::Normal,
-    //     reason: Cow::from("hello")
-    // });
-
-    // match users_socket.close(closing_code) {
-    //     Ok(_) => event!(Level::DEBUG, "Successfully closed the WebSocket!"),
-    //     Err(error) => event!(Level::DEBUG, "Error closing the WebSocket: {}", error),
-    // }
 }

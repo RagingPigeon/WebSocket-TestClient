@@ -1,43 +1,11 @@
 use crate::ChatSurfer::messages::ChatMessageSchema;
-use jsonwebtoken::{
-    Algorithm,
-    encode,
-    EncodingKey,
-    Header,
-};
 use serde::{ Deserialize, Serialize };
 use std::fmt;
 use uuid::Uuid;
 
-pub const TOPIC_USERS: &str = "/users";
-pub const TOPIC_MESSAGES: &str = "/messages";
-pub const TOPIC_SEARCH_MESSAGES: &str = "/search";
-pub const TOPIC_SEND_MESSAGE: &str = "/send";
-
 //==============================================================================
 // struct Edge View JWT Token definitions
 //==============================================================================
-#[allow(non_snake_case)]
-pub struct EdgeViewJWTHeader {
-    pub alg:    Algorithm,
-    pub typ:    String,
-}
-
-impl EdgeViewJWTHeader {
-    pub fn new() -> EdgeViewJWTHeader {
-        EdgeViewJWTHeader {
-            alg:    Algorithm::HS256,
-            typ:    "JWT".to_string(),
-        }
-    }
-
-    pub fn to_header(&self) -> Header {
-        let mut new_header = Header::new(self.alg);
-        new_header.typ = Some(self.typ.clone());
-
-        new_header
-    }
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RealmAccess {
@@ -116,36 +84,6 @@ pub struct GetMessagesRequest {
     pub roomName:   String,
 }
 
-impl GetMessagesRequest {
-    pub fn from_string(json: String) -> GetMessagesRequest {
-        serde_json::from_str(&json.as_str()).unwrap()
-    }
-    
-    pub fn from_str(json: &str) -> GetMessagesRequest {
-        serde_json::from_str(json).unwrap()
-    }
-    
-    pub fn is_valid(&self) -> bool {
-        #[allow(unused_braces)]
-        (!self.domainId.is_empty() && !self.roomName.is_empty())
-    }
-
-    pub fn to_json(&self) -> String {
-        serde_json::to_string(self).unwrap()
-    }
-
-    pub fn try_from_str(json: &str) -> Result<GetMessagesRequest, &'static str> {
-        match serde_json::from_str(json) {
-            Ok(new_object) => {
-                Ok(new_object)
-            }
-            Err(e) => {
-                Err("Could not create a GetMessageRequest object from the given str")
-            }
-        }
-    }
-}
-
 //==============================================================================
 // struct SearchMessagesRequest
 //==============================================================================
@@ -155,17 +93,6 @@ pub struct SearchMessagesRequest {
     pub domainId:   String,
     pub roomName:   String,
     pub keywords:   Vec<String>,
-}
-
-impl SearchMessagesRequest {
- 
-    pub fn from_string(json: String) -> SearchMessagesRequest {
-        serde_json::from_str(&json.as_str()).unwrap()
-    }
-    
-    pub fn from_str(json: &str) -> SearchMessagesRequest {
-        serde_json::from_str(json).unwrap()
-    }
 }
 
 //==============================================================================
@@ -200,22 +127,6 @@ impl fmt::Display for GetUsersRequest {
     }
 }
 
-impl GetUsersRequest {
- 
-    pub fn from_string(json: String) -> GetUsersRequest {
-        serde_json::from_str(&json.as_str()).unwrap()
-    }
-    
-    pub fn from_str(json: &str) -> GetUsersRequest {
-        serde_json::from_str(json).unwrap()
-    }
-
-    pub fn is_valid(&self) -> bool {
-        #[allow(unused_braces)]
-        (!self.domainId.is_empty() && !self.roomName.is_empty())
-    }
-}
-
 //==============================================================================
 // struct GetUsersResponse
 //==============================================================================
@@ -232,21 +143,6 @@ impl fmt::Display for GetUsersResponse {
 }
 
 impl GetUsersResponse {
- 
-    pub fn from_string(json: String) -> GetUsersResponse {
-        serde_json::from_str(&json.as_str()).unwrap()
-    }
-    
-    pub fn from_str(json: &str) -> GetUsersResponse {
-        serde_json::from_str(json).unwrap()
-    }
-
-    pub fn new() -> GetUsersResponse {
-        GetUsersResponse {
-            userNames: Vec::new()
-        }
-    }
-
     /*
      * This method constructs a JSON string from the GetUsersResponse's
      * fields.
@@ -275,23 +171,6 @@ impl fmt::Display for SendNewMessageRequest {
 }
 
 impl SendNewMessageRequest {
- 
-    pub fn from_string(json: String) -> SendNewMessageRequest {
-        serde_json::from_str(&json.as_str()).unwrap()
-    }
-    
-    pub fn from_str(json: &str) -> SendNewMessageRequest {
-        serde_json::from_str(json).unwrap()
-    }
-
-    pub fn new() -> SendNewMessageRequest {
-        SendNewMessageRequest {
-            domainId:   String::new(),
-            roomName:   String::new(),
-            text:       String::new()
-        }
-    }
-
     /*
      * This method constructs a JSON string from the SendNewMessageRequest's
      * fields.
