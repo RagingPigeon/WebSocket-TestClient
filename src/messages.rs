@@ -70,12 +70,19 @@ impl fmt::Display for EdgeViewClaims {
     }
 }
 
-
+// #############################################################################
+// #############################################################################
+//                                Get Message
+// #############################################################################
+// #############################################################################
 
 //==============================================================================
 // struct GetMessagesRequest
 //==============================================================================
 
+/// The GetMessagesRequest structure represents a request that Edge View
+/// sends to this chatsurfer-connect service to retrieve all of the
+/// ChatSurfer chat messages within a specified chat room.
 #[allow(non_snake_case)]
 #[derive(Serialize, Deserialize)]
 pub struct GetMessagesRequest {
@@ -83,6 +90,12 @@ pub struct GetMessagesRequest {
     // The name of the chatroom that we want to get all users from.
     pub roomName:   String,
 }
+
+// #############################################################################
+// #############################################################################
+//                               Search Message
+// #############################################################################
+// #############################################################################
 
 //==============================================================================
 // struct SearchMessagesRequest

@@ -30,6 +30,7 @@ use tokio_tungstenite::{
         client::IntoClientRequest,
         http::HeaderValue,
     },
+    WebSocketStream,
 };
 use tracing::{ event, Level };
 use tracing_subscriber;
@@ -37,7 +38,7 @@ use uuid::Uuid;
 
 
 const TEST_DOMAIN: &str = "chatsurferxmppunclass";
-const TEST_ROOM: &str = "Test_Room";
+const TEST_ROOM: &str = "edge-view-test-room";
 
 fn get_users_message() -> String {
     let get_users_request: GetUsersRequest = GetUsersRequest {
@@ -58,11 +59,15 @@ fn build_messages_request() -> String {
 }
 
 fn build_search_messages_request() -> String {
+    let search_str: &str = "test_keyword";
+
     let request: SearchMessagesRequest = SearchMessagesRequest {
         domainId: String::from(TEST_DOMAIN),
         roomName: String::from(TEST_ROOM),
-        keywords: vec!(String::from("test_keyword")),
+        keywords: vec!(String::from(search_str)),
     };
+
+    event!(Level::DEBUG, "Searching for messages containing {}", search_str);
 
     serde_json::to_string(&request).unwrap()
 } // end build_search_messages_request
@@ -132,6 +137,45 @@ fn build_jwt(alg: Algorithm) -> String {
     jwt
 } // end build_jwt
 
+async fn ws_connect
+(
+    server_port:    u16,
+    jwt_alg:        Algorithm,
+    path:           &str,
+) -> Option<WebSocketStream<TcpStream>> {
+
+
+    let url = ("localhost", server_port);
+    let auth_token: HeaderValue = format!("Bearer {}", build_jwt(jwt_alg)).parse().unwrap();
+
+    let mut auth_request = format!("ws://localhost:{}{}",
+            server_port,
+            path)
+        .into_client_request()
+        .unwrap();
+    
+    auth_request
+        .headers_mut()
+        .insert("Authorization", auth_token);
+
+
+    match TcpStream::connect(url).await {
+        Ok(stream) => {
+            
+
+            let (socket, _) = client_async(
+                auth_request,
+                stream
+            ).await.expect("Failed to connect");
+
+            Some(socket)
+        }
+        Err(e) => {
+            None
+        }
+    }
+}
+
 async fn ws_connect_send
 (
     server_port:    u16,
@@ -187,7 +231,8 @@ async fn ws_connect_send
     }
 } // end ws_connect_send
 
-async fn test_send_new_message() {
+async fn test_send_new_message() -> bool {
+    event!(Level::INFO, "Beginning Send New Message Test.");
 
     let response = ws_connect_send(
         7878,
@@ -200,15 +245,72 @@ async fn test_send_new_message() {
 
             event!(Level::DEBUG, "{}", payload);
             event!(Level::INFO, "Send New Message Test passed!");
+            true
         }
         None => {
             event!(Level::DEBUG, "No response received.");
             event!(Level::ERROR, "Send New Message Test Failed!");
+            false
         }
     }
+
+
 } // end test_send_new_message
 
-async fn test_get_users() {
+async fn test_send_new_message_repeat() -> bool {
+    event!(Level::INFO, "Beginning Send New Message Repeat Test.");
+
+    let number_of_iterations: i32 = 3;
+    let mut number_of_successes: i32 = 0;
+
+    let path = "/send";
+    let client_socket = ws_connect(7878, Algorithm::HS256, path).await;
+
+    let (mut write, mut read) = client_socket.unwrap().split();
+
+
+    for i in 0..number_of_iterations {
+        event!(Level::DEBUG, "========================================");
+        event!(Level::DEBUG, "Iteration {}", i);
+
+        match write.send(Message::Text(build_new_message_request())).await {
+            Ok(()) => {
+                event!(Level::DEBUG, "Attempting to read response from {} endpoint:", path);
+                match read.next().await {
+                    Some(response) => {
+                        event!(Level::DEBUG, "We received a response!");
+    
+                        match response {
+                            Ok(payload) => {
+                                event!(Level::DEBUG, "{}", payload);
+                                number_of_successes += 1;
+                            }
+                            Err(e) => {
+                                event!(Level::ERROR, "{}", e);   
+                            }
+                        }
+                    }
+                    None => {}
+                }
+            }
+            Err(e) => {
+                event!(Level::ERROR, "Could not send the request: {}", e);
+            }
+        }
+    }
+
+    if number_of_successes == number_of_iterations {
+        event!(Level::INFO, "Send New Message Repeat Test passed!");
+        true
+    } else {
+        event!(Level::ERROR, "Send New Message Repeat Test failed!");
+        false
+    }
+
+}
+
+async fn test_get_users() -> bool {
+    event!(Level::INFO, "Beginning Get Users Test.");
 
     let response = ws_connect_send(
         7878,
@@ -221,15 +323,19 @@ async fn test_get_users() {
 
             event!(Level::DEBUG, "{}", payload);
             event!(Level::INFO, "Get Users Test passed!");
+            true
         }
         None => {
             event!(Level::DEBUG, "No response received.");
             event!(Level::ERROR, "Get Users Test Failed!");
+            false
         }
     }
 } // end test_get_users
 
-async fn test_get_messages() {
+async fn test_get_messages() -> bool {
+    event!(Level::INFO, "Beginning Get Messages Test.");
+
     let response = ws_connect_send(
         7878,
         Algorithm::HS256,
@@ -241,15 +347,19 @@ async fn test_get_messages() {
 
             event!(Level::DEBUG, "{}", payload);
             event!(Level::INFO, "Get Messages Test passed!");
+            true
         }
         None => {
             event!(Level::DEBUG, "No response received.");
             event!(Level::ERROR, "Get Messages Test Failed!");
+            false
         }
     }
 } // end test_get_messages
 
-async fn test_search_messages() {
+async fn test_search_messages() -> bool {
+    event!(Level::INFO, "Beginning Search Messages Test.");
+
     let response = ws_connect_send(
         7878,
         Algorithm::HS256,
@@ -258,19 +368,26 @@ async fn test_search_messages() {
 
     match response {
         Some(payload) => {
+            
+
 
             event!(Level::DEBUG, "{}", payload);
             event!(Level::INFO, "Search Messages Test passed!");
+            true
         }
         None => {
             event!(Level::DEBUG, "No response received.");
             event!(Level::ERROR, "Search Messages Test Failed!");
+            false
         }
     }
 } // end test_search_messages
 
 #[tokio::main]
 async fn main() {
+    let mut tests_passed: i32 = 0;
+    let mut total_tests: i32 = 0;
+
     // Set up the logging subscriber.
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
@@ -278,17 +395,26 @@ async fn main() {
 
     //======================================================================
     // Send New Message Endpoint
-    test_send_new_message().await;
+    total_tests += 1;
+    if test_send_new_message().await { tests_passed += 1; }
+    
+    total_tests += 1;
+    if test_send_new_message_repeat().await { tests_passed += 1; }
 
     //======================================================================
     //Get Users Endpoint
-    test_get_users().await;
+    total_tests += 1;
+    if test_get_users().await { tests_passed += 1; }
     
     //======================================================================
     // Get Messages Endpoint
-    test_get_messages().await;
+    total_tests += 1;
+    if test_get_messages().await { tests_passed += 1; }
 
     //======================================================================
     // Search Messages Endpoint
-    test_search_messages().await;
+    total_tests += 1;
+    if test_search_messages().await { tests_passed += 1; }
+
+    event!(Level::INFO, "Tests Passed: {}/{}", tests_passed, total_tests);
 }
