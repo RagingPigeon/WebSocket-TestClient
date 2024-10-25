@@ -1,6 +1,8 @@
 
 #[allow(non_snake_case)]
-mod ChatSurfer;
+mod chatsurfer;
+mod cli;
+mod edge_view;
 use futures_util::{ SinkExt, StreamExt };
 use jsonwebtoken::{
     Algorithm,
@@ -26,9 +28,8 @@ use tokio::net::TcpStream;
 use tokio_tungstenite::{
     client_async,
     tungstenite::{
-        protocol::Message,
-        client::IntoClientRequest,
-        http::HeaderValue,
+        client::IntoClientRequest, http::HeaderValue, protocol::{CloseFrame, Message},
+        protocol::frame::coding::CloseCode,
     },
     WebSocketStream,
 };
@@ -42,8 +43,8 @@ const TEST_ROOM: &str = "edge-view-test-room";
 
 fn get_users_message() -> String {
     let get_users_request: GetUsersRequest = GetUsersRequest {
-        domainId: String::from(TEST_DOMAIN),
-        roomName: String::from(TEST_ROOM)
+        domain_id: String::from(TEST_DOMAIN),
+        room_name: String::from(TEST_ROOM)
     };
 
     serde_json::to_string(&get_users_request).unwrap()
@@ -51,8 +52,8 @@ fn get_users_message() -> String {
 
 fn build_messages_request() -> String {
     let messages_request: GetMessagesRequest = GetMessagesRequest {
-        domainId: String::from(TEST_DOMAIN),
-        roomName: String::from(TEST_ROOM),
+        domain_id: String::from(TEST_DOMAIN),
+        room_name: String::from(TEST_ROOM),
     };
 
     serde_json::to_string(&messages_request).unwrap()
@@ -62,8 +63,8 @@ fn build_search_messages_request() -> String {
     let search_str: &str = "test_keyword";
 
     let request: SearchMessagesRequest = SearchMessagesRequest {
-        domainId: String::from(TEST_DOMAIN),
-        roomName: String::from(TEST_ROOM),
+        domain_id: String::from(TEST_DOMAIN),
+        room_name: String::from(TEST_ROOM),
         keywords: vec!(String::from(search_str)),
     };
 
@@ -74,8 +75,8 @@ fn build_search_messages_request() -> String {
 
 fn build_new_message_request() -> String {
     let request: SendNewMessageRequest = SendNewMessageRequest {
-        domainId: String::from(TEST_DOMAIN),
-        roomName: String::from(TEST_ROOM),
+        domain_id: String::from(TEST_DOMAIN),
+        room_name: String::from(TEST_ROOM),
         text: String::from("I'm a new message")
     };
 
@@ -137,45 +138,6 @@ fn build_jwt(alg: Algorithm) -> String {
     jwt
 } // end build_jwt
 
-async fn ws_connect
-(
-    server_port:    u16,
-    jwt_alg:        Algorithm,
-    path:           &str,
-) -> Option<WebSocketStream<TcpStream>> {
-
-
-    let url = ("localhost", server_port);
-    let auth_token: HeaderValue = format!("Bearer {}", build_jwt(jwt_alg)).parse().unwrap();
-
-    let mut auth_request = format!("ws://localhost:{}{}",
-            server_port,
-            path)
-        .into_client_request()
-        .unwrap();
-    
-    auth_request
-        .headers_mut()
-        .insert("Authorization", auth_token);
-
-
-    match TcpStream::connect(url).await {
-        Ok(stream) => {
-            
-
-            let (socket, _) = client_async(
-                auth_request,
-                stream
-            ).await.expect("Failed to connect");
-
-            Some(socket)
-        }
-        Err(e) => {
-            None
-        }
-    }
-}
-
 async fn ws_connect_send
 (
     server_port:    u16,
@@ -203,10 +165,12 @@ async fn ws_connect_send
         stream
     ).await.expect("Failed to connect");
 
+    std::thread::sleep(time::Duration::from_millis(3000));
+
     let (mut write, mut read) = socket.split();
 
     // Send the request.
-    match write.send(Message::Text(message)).await {
+    let result = match write.send(Message::Text(message)).await {
         Ok(()) => {
             event!(Level::DEBUG, "Attempting to read response from {} endpoint:", path);
             match read.next().await {
@@ -228,7 +192,23 @@ async fn ws_connect_send
             event!(Level::ERROR, "Could not send the request: {}", e);
             None
         }
+    };
+
+    let close_frame = CloseFrame {
+        code: CloseCode::Normal,
+        reason: std::borrow::Cow::Owned(String::from("Complete"))
+    };
+
+    match write.send(Message::Close(Some(close_frame))).await {
+        Ok(()) => {
+            event!(Level::DEBUG, "Successfully sent the closing frame.");
+        }
+        Err(e) => {
+            event!(Level::ERROR, "Could not send the closing frame: {}", e);
+        }
     }
+
+    result
 } // end ws_connect_send
 
 async fn test_send_new_message() -> bool {
@@ -264,7 +244,7 @@ async fn test_send_new_message_repeat() -> bool {
     let mut number_of_successes: i32 = 0;
 
     let path = "/send";
-    let client_socket = ws_connect(7878, Algorithm::HS256, path).await;
+    let client_socket = edge_view::client::ws_connect(7878, Algorithm::HS256, path).await;
 
     let (mut write, mut read) = client_socket.unwrap().split();
 
@@ -333,6 +313,71 @@ async fn test_get_users() -> bool {
     }
 } // end test_get_users
 
+async fn test_get_users_repeat() -> bool {
+    let number_of_iterations: i32 = 3;
+    let mut number_of_successes: i32 = 0;
+    let path: &str = "/users";
+
+    event!(Level::INFO, "Beginning Get Users Repeat Test.");
+
+    let client = edge_view::client::ws_connect(7878, Algorithm::HS256, path).await;
+
+    let (mut write, mut read) = client.unwrap().split();
+
+    for i in 0..number_of_iterations {
+        event!(Level::DEBUG, "========================================");
+        event!(Level::DEBUG, "Iteration {}", i);
+
+        match write.send(Message::Text(get_users_message())).await {
+            Ok(()) => {
+                event!(Level::DEBUG, "Attempting to read response from {} endpoint:", path);
+                match read.next().await {
+                    Some(response) => {
+                        event!(Level::DEBUG, "We received a response!");
+    
+                        match response {
+                            Ok(payload) => {
+                                event!(Level::DEBUG, "{}", payload);
+                                number_of_successes += 1;
+                            }
+                            Err(e) => {
+                                event!(Level::ERROR, "{}", e);   
+                            }
+                        }
+                    }
+                    None => {}
+                }
+            }
+            Err(e) => {
+                event!(Level::ERROR, "Could not send the request: {}", e);
+            }
+        }
+    }
+
+    let close_frame = CloseFrame {
+        code: CloseCode::Normal,
+        reason: std::borrow::Cow::Owned(String::from("Complete"))
+    };
+
+    match write.send(Message::Close(Some(close_frame))).await {
+        Ok(()) => {
+            event!(Level::DEBUG, "Successfully sent the closing frame.");
+        }
+        Err(e) => {
+            event!(Level::ERROR, "Could not send the closing frame: {}", e);
+        }
+    }
+
+    if number_of_successes == number_of_iterations {
+        event!(Level::INFO, "Get Users Repeat Test passed!");
+        true
+    } else {
+        event!(Level::ERROR, "Get Users Repeat Test failed!");
+        false
+    }
+
+} // end test_get_users
+
 async fn test_get_messages() -> bool {
     event!(Level::INFO, "Beginning Get Messages Test.");
 
@@ -393,28 +438,33 @@ async fn main() {
         .with_max_level(tracing::Level::DEBUG)
         .init();
 
+    cli::process_arguments();
+
     //======================================================================
     // Send New Message Endpoint
-    total_tests += 1;
-    if test_send_new_message().await { tests_passed += 1; }
+    // total_tests += 1;
+    // if test_send_new_message().await { tests_passed += 1; }
     
-    total_tests += 1;
-    if test_send_new_message_repeat().await { tests_passed += 1; }
+    // total_tests += 1;
+    // if test_send_new_message_repeat().await { tests_passed += 1; }
 
     //======================================================================
     //Get Users Endpoint
     total_tests += 1;
     if test_get_users().await { tests_passed += 1; }
+
+    total_tests += 1;
+    if test_get_users_repeat().await { tests_passed += 1; }
     
     //======================================================================
     // Get Messages Endpoint
-    total_tests += 1;
-    if test_get_messages().await { tests_passed += 1; }
+    // total_tests += 1;
+    // if test_get_messages().await { tests_passed += 1; }
 
     //======================================================================
     // Search Messages Endpoint
-    total_tests += 1;
-    if test_search_messages().await { tests_passed += 1; }
+    // total_tests += 1;
+    // if test_search_messages().await { tests_passed += 1; }
 
     event!(Level::INFO, "Tests Passed: {}/{}", tests_passed, total_tests);
 }

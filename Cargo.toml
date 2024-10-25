@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+clap = { version = "4", features = ["derive"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink"] }
 jsonwebtoken = { version = "9.3.0" }
 serde = { version = "1.0.119", features = ["derive"] }
