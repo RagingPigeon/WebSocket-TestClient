@@ -2,6 +2,7 @@
 #[allow(non_snake_case)]
 mod chatsurfer;
 mod cli;
+use dotenv::dotenv;
 mod edge_view;
 use futures_util::{ SinkExt, StreamExt };
 use jsonwebtoken::{
@@ -34,7 +35,7 @@ use tokio_tungstenite::{
     WebSocketStream,
 };
 use tracing::{ event, Level };
-use tracing_subscriber;
+use tracing_subscriber::{ EnvFilter, fmt, prelude::* };
 use uuid::Uuid;
 
 
@@ -289,30 +290,6 @@ async fn test_send_new_message_repeat() -> bool {
 
 }
 
-async fn test_get_users() -> bool {
-    event!(Level::INFO, "Beginning Get Users Test.");
-
-    let response = ws_connect_send(
-        7878,
-        Algorithm::HS256,
-        "/users",
-        get_users_message()).await;
-
-    match response {
-        Some(payload) => {
-
-            event!(Level::DEBUG, "{}", payload);
-            event!(Level::INFO, "Get Users Test passed!");
-            true
-        }
-        None => {
-            event!(Level::DEBUG, "No response received.");
-            event!(Level::ERROR, "Get Users Test Failed!");
-            false
-        }
-    }
-} // end test_get_users
-
 async fn test_get_users_repeat() -> bool {
     let number_of_iterations: i32 = 3;
     let mut number_of_successes: i32 = 0;
@@ -428,17 +405,134 @@ async fn test_search_messages() -> bool {
     }
 } // end test_search_messages
 
+async fn test(stream: TcpStream) {
+
+    
+    event!(Level::DEBUG, "Creating the request");
+    let socket: Option<WebSocketStream<TcpStream>> = match format!("ws://localhost:{}{}", 7878, "/users").into_client_request() {
+        Ok(mut auth_request) => {
+
+            event!(Level::DEBUG, "Building the JWT");
+            match format!("Bearer {}", build_jwt(Algorithm::HS256)).parse::<HeaderValue>() {
+
+                Ok(auth_token) => {
+
+                    event!(Level::DEBUG, "Inserting the header");
+                    auth_request
+                        .headers_mut()
+                        .insert("Authorization", auth_token);
+
+
+                    event!(Level::DEBUG, "Establishing the WebSocket handshake with the server");
+                    match client_async(auth_request, stream).await {
+                        Ok((socket, response)) => {
+                            event!(Level::DEBUG, "Connected and retreived the WebSocket stream");
+                            Some(socket)
+
+                        }
+                        Err(e) => {
+                            event!(Level::ERROR, "Could not complete the WebSocket handshake: {}", e);
+                            None
+                        }
+                    }
+                }
+                Err(e) => {
+                    event!(Level::ERROR, "Could not parse the JWT into a HeaderValue: {}", e);
+                    None
+                }
+            }
+        }
+        Err(e) => {
+            event!(Level::ERROR, "Could not create the request: {}", e);
+            None
+        }
+    };
+
+    match socket {
+        Some(socket) => {
+
+            event!(Level::DEBUG, "Splitting the WebSocket stream.");
+            let (mut write, mut read) = socket.split();
+
+            // Send the request.
+            event!(Level::DEBUG, "Sending the Get Users request.");
+            let result = match write.send(Message::Text(edge_view::client::build_users_request())).await {
+                Ok(()) => {
+                    event!(Level::DEBUG, "Attempting to read response from {} endpoint:", "/users");
+                    match read.next().await {
+                        Some(response) => {
+                            event!(Level::DEBUG, "We received a response!");
+        
+                            match response {
+                                Ok(payload) => Some(payload),
+                                Err(e) => {
+                                    event!(Level::ERROR, "{}", e);
+                                    None
+                                }
+                            }
+                        }
+                        None => None
+                    }
+                }
+                Err(e) => {
+                    event!(Level::ERROR, "Could not send the request: {}", e);
+                    None
+                }
+            };
+        
+            let close_frame = CloseFrame {
+                code: CloseCode::Normal,
+                reason: std::borrow::Cow::Owned(String::from("Complete"))
+            };
+        
+            match write.send(Message::Close(Some(close_frame))).await {
+                Ok(()) => {
+                    event!(Level::DEBUG, "Successfully sent the closing frame.");
+                }
+                Err(e) => {
+                    event!(Level::ERROR, "Could not send the closing frame: {}", e);
+                }
+            }
+        }
+        None => {
+            event!(Level::ERROR, "Could not create the socket.");
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let mut tests_passed: i32 = 0;
     let mut total_tests: i32 = 0;
 
     // Set up the logging subscriber.
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
+    dotenv().ok();
+    tracing_subscriber::registry()
+        .with(fmt::layer())
+        .with(EnvFilter::from_default_env())
         .init();
+    
+     let mut tasks = cli::process_arguments();
 
-    cli::process_arguments();
+    // while let Some(completed_task) = tasks.join_next().await {
+    //     match completed_task {
+    //         Ok(()) => {
+    //             event!(Level::DEBUG, "Task completed.");
+    //         }
+    //         Err(e) => {
+    //             event!(Level::ERROR, "A task encountered an error: {}", e);
+    //         }
+    //     }
+    // }
+
+
+    // let (socket, _) = client_async(
+    //     auth_request,
+    //     stream
+    // ).await.expect("Failed to connect");
+
+
+
 
     //======================================================================
     // Send New Message Endpoint
@@ -450,10 +544,7 @@ async fn main() {
 
     //======================================================================
     //Get Users Endpoint
-    total_tests += 1;
-    if test_get_users().await { tests_passed += 1; }
-
-    total_tests += 1;
+    //total_tests += 1;
     if test_get_users_repeat().await { tests_passed += 1; }
     
     //======================================================================

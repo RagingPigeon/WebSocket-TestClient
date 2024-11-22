@@ -1,9 +1,11 @@
+use crate::edge_view;
 use jsonwebtoken::{
     Algorithm,
     encode,
     EncodingKey,
     Header,
 };
+use futures_util::{ SinkExt, StreamExt };
 use crate::messages;
 use messages::{
     Account,
@@ -16,7 +18,8 @@ use messages::{
     SearchMessagesRequest,
     SendNewMessageRequest,
 };
-use std::time;
+use std::{thread, time};
+use thread_id;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
     client_async,
@@ -26,9 +29,20 @@ use tokio_tungstenite::{
     },
     WebSocketStream,
 };
+use tracing::{event, Level};
 use uuid::Uuid;
 
 pub const SERVER_PORT: u16 = 7878;
+const TEST_DOMAIN: &str = "chatsurferxmppunclass";
+const TEST_ROOM: &str = "edge-view-test-room";
+
+pub fn debug(message: String) {
+    event!(Level::DEBUG, "Thread {}: {}", thread_id::get(), message);
+}
+
+pub fn error(message: String) {
+    event!(Level::ERROR, "Thread {}: {}", thread_id::get(), message);
+}
 
 fn build_test_claim() -> EdgeViewClaims {
     EdgeViewClaims {
@@ -72,6 +86,15 @@ fn build_test_claim() -> EdgeViewClaims {
     }
 }
 
+pub fn build_users_request() -> String {
+    let get_users_request: GetUsersRequest = GetUsersRequest {
+        domain_id: String::from(TEST_DOMAIN),
+        room_name: String::from(TEST_ROOM)
+    };
+
+    serde_json::to_string(&get_users_request).unwrap()
+} // end build_users_request
+
 fn build_jwt(alg: Algorithm) -> String {
     let header = Header::new(alg);
     let claims = build_test_claim();
@@ -100,6 +123,8 @@ pub async fn ws_connect(
         .into_client_request()
         .unwrap();
     
+    event!(Level::TRACE, "Authorization header: {:?}", auth_token);
+
     auth_request
         .headers_mut()
         .insert("Authorization", auth_token);
@@ -107,16 +132,167 @@ pub async fn ws_connect(
     match TcpStream::connect(url).await {
         Ok(stream) => {
             
-
             let (socket, _) = client_async(
                 auth_request,
                 stream
             ).await.expect("Failed to connect");
 
+            std::thread::sleep(time::Duration::from_millis(3000));
+
             Some(socket)
         }
         Err(e) => {
+            error(format!("Could not connect to server: {}", e));
             None
+        }
+    }
+} // end ws_connect
+
+async fn ws_connect_send(
+    server_port:    u16,
+    jwt_alg:        Algorithm,
+    path:           &str,
+    message:        String,
+) -> Option<Message> {
+
+    let socket = ws_connect(server_port, jwt_alg, path).await;
+
+    match socket {
+        Some(socket) => {
+            let (mut write, mut read) = socket.split();
+
+            // Send the request.
+            let result = match write.send(Message::Text(message)).await {
+                Ok(()) => {
+                    event!(Level::DEBUG, "Attempting to read response from {} endpoint:", path);
+                    match read.next().await {
+                        Some(response) => {
+                            event!(Level::DEBUG, "We received a response!");
+        
+                            match response {
+                                Ok(payload) => Some(payload),
+                                Err(e) => {
+                                    event!(Level::ERROR, "{}", e);
+                                    None
+                                }
+                            }
+                        }
+                        None => None
+                    }
+                }
+                Err(e) => {
+                    event!(Level::ERROR, "Could not send the request: {}", e);
+                    None
+                }
+            };
+        
+            let close_frame = CloseFrame {
+                code: CloseCode::Normal,
+                reason: std::borrow::Cow::Owned(String::from("Complete"))
+            };
+        
+            match write.send(Message::Close(Some(close_frame))).await {
+                Ok(()) => {
+                    event!(Level::DEBUG, "Successfully sent the closing frame.");
+                }
+                Err(e) => {
+                    event!(Level::ERROR, "Could not send the closing frame: {}", e);
+                }
+            }
+        
+            result
+        }
+        None => {
+            error(format!("No WebSocket connection."));
+            None
+        }
+    }
+} // end ws_connect_send
+
+pub async fn spin_client(endpoint: String) {
+
+    match edge_view::client::ws_connect(
+        edge_view::client::SERVER_PORT,
+        Algorithm::HS256,
+        endpoint.as_str()
+    ).await {
+        Some(client) => {
+            event!(Level::DEBUG, "We successfully connected to the server!  Moving into the spin loop");
+
+            loop {
+                // We will stay here forever to keep the server connection
+                // live.
+                thread::sleep(time::Duration::from_secs(10));
+                debug(format!("spinning on {}", endpoint));
+            }
+        }
+        None => {
+            error(format!("An error occurred connecting to the server. Killing the thread."));
+        }
+    }
+} // end spin_client
+
+pub async fn test_get_users() {
+    event!(Level::INFO, "Beginning Get Users Test.");
+
+    let response = ws_connect_send(
+        7878,
+        Algorithm::HS256,
+        "/users",
+        build_users_request()).await;
+
+    match response {
+        Some(payload) => {
+
+            debug(format!("{}", payload));
+            event!(Level::INFO, "Get Users Test passed!");
+        }
+        None => {
+            event!(Level::DEBUG, "No response received.");
+            error(format!("Get Users Test Failed!"));
+        }
+    }
+} // end test_get_users
+
+pub async fn test_get_users_and_listen() {
+    event!(Level::INFO, "Beginning Get Users and Listen Test.");
+
+    let socket = ws_connect(7878, Algorithm::HS256, "/users").await;
+
+    if let Some(mut socket) = socket {
+
+        if let Ok(()) = socket.send(Message::Text(build_users_request())).await {
+
+            while let Some(update) = socket.next().await {
+
+                match update {
+
+                    Ok(Message::Text(payload)) => {
+        
+                        event!(Level::DEBUG, "{}", payload);
+                    }
+                    Ok(Message::Close(_)) => {
+                        event!(Level::DEBUG,
+                            "{}: Received a Closing frame.",
+                            std::process::id()
+                        );
+                        break;
+                    }
+                    Ok(_) => {
+                        event!(Level::DEBUG,
+                            "{}: We received an unknown message. Ignoring.",
+                            std::process::id()
+                        );
+                    }
+                    Err(e) => {
+                        event!(Level::ERROR,
+                            "{}: An error occurred receiving from the WebSocket: {:#?}",
+                            std::process::id(),
+                            e
+                        );
+                    }
+                }
+            }
         }
     }
 }

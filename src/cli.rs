@@ -6,6 +6,12 @@ use jsonwebtoken::{
     EncodingKey,
     Header,
 };
+use std::{thread, time};
+use thread_id;
+use tokio::{
+    task::JoinHandle,
+    task::JoinSet,
+};
 use tracing::{event, Level};
 
 #[derive(serde::Serialize)]
@@ -13,6 +19,12 @@ use tracing::{event, Level};
 pub struct Args {
     #[arg(long = "spin_client", value_parser, num_args = 1.., value_delimiter = ',')]
     pub spin_client: Option<Vec<String>>,
+
+    #[arg(long = "test_get_users", default_value_t = false)]
+    pub test_get_users: bool,
+
+    #[arg(long = "test_get_users_and_listen", default_value_t = false)]
+    pub test_get_users_and_listen: bool,
 }
 
 impl Args {
@@ -21,31 +33,34 @@ impl Args {
     }
 }
 
-async fn spin_client(endpoint: String) {
+pub fn process_arguments() -> JoinSet<()> {
 
-    _ = edge_view::client::ws_connect(
-        edge_view::client::SERVER_PORT,
-        Algorithm::HS256,
-        endpoint.as_str());
-
-    event!(Level::DEBUG, "Moving into the spin loop");
-    loop {
-        // We will stay here forever to keep the server connection
-        // live.
-    }
-}
-
-pub fn process_arguments() {
+    let mut return_value: JoinSet<()> = JoinSet::new();
     let args = Args::parse();
+    
 
-    match args.spin_client {
-        Some(clients) => {
-            for endpoint in clients {
-                event!(Level::DEBUG, "Spawning spin client for endpoint: {}", endpoint);
-
-                tokio::spawn(spin_client(endpoint.clone()));
-            }
-        }
-        _ => {}
+    if args.test_get_users {
+        event!(Level::DEBUG, "Spawning test_get_users thread.");
+        return_value.spawn(edge_view::client::test_get_users());
     }
-}
+
+    if args.test_get_users_and_listen {
+        event!(Level::DEBUG, "Spawning test_get_users_and_listen thread.");
+        return_value.spawn(edge_view::client::test_get_users_and_listen());
+    }
+
+    thread::sleep(time::Duration::from_secs(5));
+
+    // match args.spin_client {
+    //     Some(clients) => {
+    //         for endpoint in clients {
+    //             event!(Level::DEBUG, "Spawning spin client for endpoint: {}", endpoint);
+
+    //             return_value.spawn(edge_view::client::spin_client(endpoint.clone()));
+    //         }
+    //     }
+    //     _ => {}
+    // }
+
+    return_value
+} // end process arguments
