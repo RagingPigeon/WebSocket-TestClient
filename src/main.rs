@@ -4,6 +4,9 @@ mod chatsurfer;
 mod cli;
 use dotenv::dotenv;
 mod edge_view;
+mod service;
+
+use clap::Parser;
 use futures_util::{ SinkExt, StreamExt };
 use jsonwebtoken::{
     Algorithm,
@@ -16,12 +19,14 @@ use messages::{
     Account,
     EdgeViewClaims,
     GetMessagesRequest,
+    GetMessagesResponse,
     GetUsersRequest,
+    GetUsersResponse,
     RealmAccess,
     RealmManagement,
     ResourceAccess,
     SearchMessagesRequest,
-    SendNewMessageRequest,
+    SendNewMessageRequest
 };
 use serde_json;
 use std::time;
@@ -41,6 +46,15 @@ use uuid::Uuid;
 
 const TEST_DOMAIN: &str = "chatsurferxmppunclass";
 const TEST_ROOM: &str = "edge-view-test-room";
+const JWT_ALGORITHM: jsonwebtoken::Algorithm = Algorithm::HS256;
+
+pub struct TestCase {
+    pub server_path:    String,
+    pub test_name:      String,
+    pub jwt_header_alg: jsonwebtoken::Algorithm,
+    pub request:        String,
+    pub validator:      fn(String) -> bool,
+}
 
 fn get_users_message() -> String {
     let get_users_request: GetUsersRequest = GetUsersRequest {
@@ -81,7 +95,7 @@ fn build_new_message_request() -> String {
         text: String::from("I'm a new message")
     };
 
-    request.to_json()
+    request.to_json().unwrap()
 } // end build_new_message_request
 
 fn build_test_claim() -> EdgeViewClaims {
@@ -500,10 +514,129 @@ async fn test(stream: TcpStream) {
     }
 }
 
+fn get_messages_validator
+(
+    response:   String,
+) -> bool {
+    event!(Level::DEBUG, "Get Messages payload:");
+    event!(Level::DEBUG, "{}", response);
+
+    match GetMessagesResponse::try_from_json(response) {
+        Ok(response_struct) => {
+            event!(Level::DEBUG, "Successfully parsed the response into a struct: {}", response_struct);
+            true
+        }
+        Err(e) => {
+            event!(Level::ERROR, "The Get Messages Response was invalid, and could not be parsed into a structure: {}", e);
+            false
+        }
+    }
+} // end get_messages_validator
+
+fn get_users_validator
+(
+    response:   String,
+) -> bool {
+    event!(Level::DEBUG, "Get Users payload:");
+    event!(Level::DEBUG, "{}", response);
+
+    match GetUsersResponse::try_from_json(response) {
+        Ok(response_struct) => {
+            event!(Level::DEBUG, "Successfully parsed the response into a struct: {}", response_struct);
+            true
+        }
+        Err(e) => {
+            event!(Level::ERROR, "The Get Users Response was invalid, and could not be parsed into a structure: {}", e);
+            false
+        }
+    }
+} // end get_users_validator
+
+async fn run_test<F>
+(
+    config:         cli::Args,
+    server_path:    &str,
+    test_name:      &str,
+    jwt_header_alg: jsonwebtoken::Algorithm,
+    request:        String,
+    validator:      F,
+) -> bool
+where
+    F: Fn(String) -> bool,
+{
+    event!(Level::INFO, "Beginning {} Test.", test_name);
+
+    let response = ws_connect_send(
+        config.server_port,
+        jwt_header_alg,
+        server_path,
+        request
+    ).await;
+
+    // Check the response from sending the request to the server.
+    let test_status: bool = match response {
+        Some(payload) => {
+
+            match payload.into_text() {
+                Ok(payload_string) => {
+                    validator(payload_string)
+                }
+                Err(e) => {
+                    event!(Level::ERROR, "Invalid response payload format: {}", e);
+                    false
+                }
+            }
+        }
+        None => {
+            event!(Level::ERROR, "No response received.");
+            false
+        }
+    };
+
+    // Log the test status message.
+    match test_status {
+        true => {
+            event!(Level::INFO, "{} Test Passed!", test_name);
+        }
+        false => {
+            event!(Level::ERROR, "{} Test Failed!", test_name);
+        }
+    }
+
+    test_status
+} // end run_test
+
+async fn run_test_list(
+    config:     cli::Args,
+    test_list:  Vec<TestCase>
+) {
+    let mut test_status: bool;
+    let mut total_tests: i32 = 0;
+    let mut passed_tests: i32 = 0;
+
+    for test_case in test_list {
+
+        test_status = run_test(
+            config.clone(),
+            test_case.server_path.as_str(),
+            test_case.test_name.as_str(),
+            test_case.jwt_header_alg,
+            test_case.request,
+            test_case.validator
+        ).await;
+
+        if true == test_status {
+            passed_tests += 1;
+        }
+
+        total_tests += 1;
+    }
+
+    event!(Level::INFO, "Tests Passed: {}/{}", passed_tests, total_tests);
+} // end run_test_list
+
 #[tokio::main]
 async fn main() {
-    let mut tests_passed: i32 = 0;
-    let mut total_tests: i32 = 0;
 
     // Set up the logging subscriber.
     dotenv().ok();
@@ -512,7 +645,27 @@ async fn main() {
         .with(EnvFilter::from_default_env())
         .init();
     
-     let mut tasks = cli::process_arguments();
+    let args = cli::Args::parse();
+    //let mut tasks = cli::process_arguments();
+
+    let test_list: Vec<TestCase> = vec![
+        TestCase {
+            server_path:    String::from("/messages"),
+            test_name:      String::from("Get Messages"),
+            jwt_header_alg: JWT_ALGORITHM,
+            request:        build_messages_request(),
+            validator:      get_messages_validator,
+        },
+        TestCase {
+            server_path:    String::from("/users"),
+            test_name:      String::from("Get Users"),
+            jwt_header_alg: JWT_ALGORITHM,
+            request:        get_users_message(),
+            validator:      get_users_validator,
+        },
+    ];
+
+    run_test_list(args, test_list).await;
 
     // while let Some(completed_task) = tasks.join_next().await {
     //     match completed_task {
@@ -544,8 +697,8 @@ async fn main() {
 
     //======================================================================
     //Get Users Endpoint
-    //total_tests += 1;
-    if test_get_users_repeat().await { tests_passed += 1; }
+    // total_tests += 1;
+    // if test_get_users_repeat().await { tests_passed += 1; }
     
     //======================================================================
     // Get Messages Endpoint
@@ -556,6 +709,4 @@ async fn main() {
     // Search Messages Endpoint
     // total_tests += 1;
     // if test_search_messages().await { tests_passed += 1; }
-
-    event!(Level::INFO, "Tests Passed: {}/{}", tests_passed, total_tests);
 }

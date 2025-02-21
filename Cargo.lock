@@ -6,9 +6,11 @@ version = 3
 name = "WebSocket-TestClient"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "clap",
  "dotenv",
  "futures-util",
+ "http 1.1.0",
  "jsonwebtoken",
  "serde",
  "serde_json",
@@ -95,6 +97,12 @@ dependencies = [
  "anstyle",
  "windows-sys 0.59.0",
 ]
+
+[[package]]
+name = "anyhow"
+version = "1.0.95"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "34ac096ce696dc2fcabef30516bb13c0a68a11d30131d3df6f04711467681b04"
 
 [[package]]
 name = "autocfg"

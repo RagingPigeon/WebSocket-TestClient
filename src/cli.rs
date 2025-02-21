@@ -17,6 +17,13 @@ use tracing::{event, Level};
 #[derive(serde::Serialize)]
 #[derive(Clone, Parser, Debug)]
 pub struct Args {
+
+    #[arg(long = "server_ip", default_value_t = String::from("0.0.0.0"))]
+    pub server_ip: String,
+
+    #[arg(long = "server_port", default_value_t = 7878)]
+    pub server_port: u16,
+
     #[arg(long = "spin_client", value_parser, num_args = 1.., value_delimiter = ',')]
     pub spin_client: Option<Vec<String>>,
 
@@ -39,17 +46,17 @@ pub fn process_arguments() -> JoinSet<()> {
     let args = Args::parse();
     
 
-    if args.test_get_users {
-        event!(Level::DEBUG, "Spawning test_get_users thread.");
-        return_value.spawn(edge_view::client::test_get_users());
-    }
+    // if args.test_get_users {
+    //     event!(Level::DEBUG, "Spawning test_get_users thread.");
+    //     return_value.spawn(edge_view::client::test_get_users());
+    // }
 
-    if args.test_get_users_and_listen {
-        event!(Level::DEBUG, "Spawning test_get_users_and_listen thread.");
-        return_value.spawn(edge_view::client::test_get_users_and_listen());
-    }
+    // if args.test_get_users_and_listen {
+    //     event!(Level::DEBUG, "Spawning test_get_users_and_listen thread.");
+    //     return_value.spawn(edge_view::client::test_get_users_and_listen());
+    // }
 
-    thread::sleep(time::Duration::from_secs(5));
+    // thread::sleep(time::Duration::from_secs(5));
 
     // match args.spin_client {
     //     Some(clients) => {
