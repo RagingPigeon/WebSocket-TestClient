@@ -27,8 +27,20 @@ pub struct Args {
     #[arg(long = "spin_client", value_parser, num_args = 1.., value_delimiter = ',')]
     pub spin_client: Option<Vec<String>>,
 
+    #[arg(long = "test_all", default_value_t = false)]
+    pub test_all: bool,
+
+    #[arg(long = "test_create_message", default_value_t = false)]
+    pub test_create_message: bool,
+
+    #[arg(long = "test_get_messages", default_value_t = false)]
+    pub test_get_messages: bool,
+
     #[arg(long = "test_get_users", default_value_t = false)]
     pub test_get_users: bool,
+
+    #[arg(long = "test_search_messages", default_value_t = false)]
+    pub test_search_messages: bool,
 
     #[arg(long = "test_get_users_and_listen", default_value_t = false)]
     pub test_get_users_and_listen: bool,
@@ -39,35 +51,3 @@ impl Args {
         serde_json::to_string(self).unwrap()
     }
 }
-
-pub fn process_arguments() -> JoinSet<()> {
-
-    let mut return_value: JoinSet<()> = JoinSet::new();
-    let args = Args::parse();
-    
-
-    // if args.test_get_users {
-    //     event!(Level::DEBUG, "Spawning test_get_users thread.");
-    //     return_value.spawn(edge_view::client::test_get_users());
-    // }
-
-    // if args.test_get_users_and_listen {
-    //     event!(Level::DEBUG, "Spawning test_get_users_and_listen thread.");
-    //     return_value.spawn(edge_view::client::test_get_users_and_listen());
-    // }
-
-    // thread::sleep(time::Duration::from_secs(5));
-
-    // match args.spin_client {
-    //     Some(clients) => {
-    //         for endpoint in clients {
-    //             event!(Level::DEBUG, "Spawning spin client for endpoint: {}", endpoint);
-
-    //             return_value.spawn(edge_view::client::spin_client(endpoint.clone()));
-    //         }
-    //     }
-    //     _ => {}
-    // }
-
-    return_value
-} // end process arguments

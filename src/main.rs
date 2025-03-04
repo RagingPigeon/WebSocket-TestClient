@@ -16,17 +16,7 @@ use jsonwebtoken::{
 };
 mod messages;
 use messages::{
-    Account,
-    EdgeViewClaims,
-    GetMessagesRequest,
-    GetMessagesResponse,
-    GetUsersRequest,
-    GetUsersResponse,
-    RealmAccess,
-    RealmManagement,
-    ResourceAccess,
-    SearchMessagesRequest,
-    SendNewMessageRequest
+    Account, EdgeViewClaims, GetMessagesRequest, GetMessagesResponse, GetUsersRequest, GetUsersResponse, RealmAccess, RealmManagement, ResourceAccess, SearchMessagesRequest, SearchMessagesResponse, SendNewMessageRequest, SendNewMessageResponse
 };
 use serde_json;
 use std::time;
@@ -188,6 +178,7 @@ async fn ws_connect_send
     let result = match write.send(Message::Text(message)).await {
         Ok(()) => {
             event!(Level::DEBUG, "Attempting to read response from {} endpoint:", path);
+
             match read.next().await {
                 Some(response) => {
                     event!(Level::DEBUG, "We received a response!");
@@ -514,9 +505,28 @@ async fn test(stream: TcpStream) {
     }
 }
 
+fn create_message_validator
+(
+    response: String
+) -> bool {
+    event!(Level::DEBUG, "Create Message payload:");
+    event!(Level::DEBUG, "{}", response);
+
+    match SendNewMessageResponse::try_from_json(response) {
+        Ok(response_struct) => {
+            event!(Level::DEBUG, "Successfully parsed the response into a struct: {}", response_struct);
+            true
+        }
+        Err(e) => {
+            event!(Level::ERROR, "The Create Message Response was invalid, and could not be parsed into a structure: {}", e);
+            false
+        }
+    }
+} // end create_message_validator
+
 fn get_messages_validator
 (
-    response:   String,
+    response:   String
 ) -> bool {
     event!(Level::DEBUG, "Get Messages payload:");
     event!(Level::DEBUG, "{}", response);
@@ -535,7 +545,7 @@ fn get_messages_validator
 
 fn get_users_validator
 (
-    response:   String,
+    response:   String
 ) -> bool {
     event!(Level::DEBUG, "Get Users payload:");
     event!(Level::DEBUG, "{}", response);
@@ -551,6 +561,25 @@ fn get_users_validator
         }
     }
 } // end get_users_validator
+
+fn search_messages_validator
+(
+    response:   String
+) -> bool {
+    event!(Level::DEBUG, "Search Messages payload:");
+    event!(Level::DEBUG, "{}", response);
+
+    match SearchMessagesResponse::try_from_json(response) {
+        Ok(response_struct) => {
+            event!(Level::DEBUG, "Successfully parsed the response into a struct: {}", response_struct);
+            true
+        }
+        Err(e) => {
+            event!(Level::ERROR, "The Search Messages Response was invalid, and could not be parsed into a structure: {}", e);
+            false
+        }
+    }
+} // end search_messages_validator
 
 async fn run_test<F>
 (
@@ -635,6 +664,64 @@ async fn run_test_list(
     event!(Level::INFO, "Tests Passed: {}/{}", passed_tests, total_tests);
 } // end run_test_list
 
+pub fn process_arguments
+(
+    config: cli::Args
+) -> Vec<TestCase> {
+
+    let mut test_list: Vec<TestCase> = Vec::new();
+
+    if config.test_create_message || config.test_all {
+        test_list.push(
+            TestCase {
+                server_path:    String::from("/send"),
+                test_name:      String::from("Create Message"),
+                jwt_header_alg: JWT_ALGORITHM,
+                request:        build_new_message_request(),
+                validator:      create_message_validator
+            }
+        );
+    }
+
+    if config.test_get_messages || config.test_all {
+        test_list.push(
+            TestCase {
+                server_path:    String::from("/messages"),
+                test_name:      String::from("Get Messages"),
+                jwt_header_alg: JWT_ALGORITHM,
+                request:        build_messages_request(),
+                validator:      get_messages_validator
+            }
+        );
+    }
+
+    if config.test_get_users || config.test_all {
+        test_list.push(
+            TestCase {
+                server_path:    String::from("/users"),
+                test_name:      String::from("Get Users"),
+                jwt_header_alg: JWT_ALGORITHM,
+                request:        get_users_message(),
+                validator:      get_users_validator
+            }
+        );
+    }
+
+    if config.test_search_messages || config.test_all {
+        test_list.push(
+            TestCase {
+                server_path:    String::from("/search"),
+                test_name:      String::from("Search Messages"),
+                jwt_header_alg: JWT_ALGORITHM,
+                request:        build_search_messages_request(),
+                validator:      search_messages_validator
+            }
+        );
+    }
+
+    test_list
+} // end process arguments
+
 #[tokio::main]
 async fn main() {
 
@@ -646,24 +733,7 @@ async fn main() {
         .init();
     
     let args = cli::Args::parse();
-    //let mut tasks = cli::process_arguments();
-
-    let test_list: Vec<TestCase> = vec![
-        TestCase {
-            server_path:    String::from("/messages"),
-            test_name:      String::from("Get Messages"),
-            jwt_header_alg: JWT_ALGORITHM,
-            request:        build_messages_request(),
-            validator:      get_messages_validator,
-        },
-        TestCase {
-            server_path:    String::from("/users"),
-            test_name:      String::from("Get Users"),
-            jwt_header_alg: JWT_ALGORITHM,
-            request:        get_users_message(),
-            validator:      get_users_validator,
-        },
-    ];
+    let test_list = process_arguments(args.clone());
 
     run_test_list(args, test_list).await;
 
@@ -683,30 +753,4 @@ async fn main() {
     //     auth_request,
     //     stream
     // ).await.expect("Failed to connect");
-
-
-
-
-    //======================================================================
-    // Send New Message Endpoint
-    // total_tests += 1;
-    // if test_send_new_message().await { tests_passed += 1; }
-    
-    // total_tests += 1;
-    // if test_send_new_message_repeat().await { tests_passed += 1; }
-
-    //======================================================================
-    //Get Users Endpoint
-    // total_tests += 1;
-    // if test_get_users_repeat().await { tests_passed += 1; }
-    
-    //======================================================================
-    // Get Messages Endpoint
-    // total_tests += 1;
-    // if test_get_messages().await { tests_passed += 1; }
-
-    //======================================================================
-    // Search Messages Endpoint
-    // total_tests += 1;
-    // if test_search_messages().await { tests_passed += 1; }
 }

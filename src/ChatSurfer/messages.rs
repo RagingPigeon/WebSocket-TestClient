@@ -50,10 +50,10 @@ pub const UNCLASSIFIED_STRING: &str = "UNCLASSIFIED";
 /// 
 /// # Returns
 /// - Ok() if successfully converted the error data into a
-/// ChatSurferResponseType error variant.
+///   ChatSurferResponseType error variant.
 /// - Err() if the `status_code` or `response` were unrecognized and could
-/// not be converted into a ChatSurferResponseType error variant.  Err() will
-/// contain a generic CommonError struct and error message.
+///   not be converted into a ChatSurferResponseType error variant.  Err() will
+///   contain a generic CommonError struct and error message.
 pub fn parse_error_message(
     status_code:    StatusCode,
     response:       String,
@@ -656,7 +656,7 @@ impl ChatMessageSchema {
             room_name:      source.clone(),
             sender:         source.clone(),
             text:           source.clone(),
-            thread_id:      Some(String::from(source.clone())),
+            thread_id:      Some(source.clone()),
             timestamp:      source.clone(),
             user_id:        source.clone(),
             private:        false,

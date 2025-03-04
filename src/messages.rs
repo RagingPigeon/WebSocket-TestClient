@@ -106,27 +106,6 @@ impl Error {
 // #############################################################################
 // #############################################################################
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RealmAccess {
-    pub roles:  Vec<String>
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RealmManagement {
-    pub roles:  Vec<String>
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Account {
-    pub roles:  Vec<String>
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ResourceAccess {
-    pub realm_management:   RealmManagement,
-    pub account:            Account,
-}
-
 #[allow(non_snake_case)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EdgeViewClaims {
@@ -235,12 +214,46 @@ pub struct SendNewMessageResponse {
     pub message: String
 }
 
+impl fmt::Display for SendNewMessageResponse {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let display_string = match self.try_to_json() {
+            Ok(string) => string,
+            Err(e) => e.to_string()
+        };
+
+        write!(f, "{}", display_string)
+    }
+}
+
 impl SendNewMessageResponse {
     pub fn new_204() -> SendNewMessageResponse {
         SendNewMessageResponse {
             message: String::from("Successful - No Response Content"),
         }
     }
+
+    /// This method will attempt to convert the given JSON string into a
+    /// SendNewMessageResponse structure.
+    /// 
+    /// # Parameters
+    /// ## json
+    /// The string representation of a SendNewMessageResponse structure in
+    /// JSON format.
+    /// 
+    /// # Returns
+    /// - Ok() containing the parsed SendNewMessageResponse structure.
+    /// - Err() describing any deserialization errors.
+    #[allow(dead_code)]
+    pub fn try_from_json
+    (
+        json: String
+    ) -> Result<SendNewMessageResponse, anyhow::Error> {
+
+        let response_struct: SendNewMessageResponse = serde_json::from_str::<SendNewMessageResponse>(&json)
+            .with_context(|| format!("Unable to create SendNewMessageResponse struct from String {}", json))?;
+
+        Ok(response_struct)
+    } // end try_from_json
 
     pub fn try_to_json(&self) -> Result<String, anyhow::Error> {
         // Attempt to serialize the SendNewMessageResponse struct, and return
@@ -317,6 +330,18 @@ impl GetMessagesResponse {
         }
     }
 
+    /// This method will attempt to convert the given JSON string into a
+    /// GetMessagesResponse structure.
+    /// 
+    /// # Parameters
+    /// ## json
+    /// The string representation of a GetMessagesResponse structure in JSON
+    /// format.
+    /// 
+    /// # Returns
+    /// - Ok() containing the parsed GetMessagesResponse structure.
+    /// - Err() describing any deserialization errors.
+    #[allow(dead_code)]
     pub fn try_from_json(json: String) -> Result<GetMessagesResponse, anyhow::Error> {
         let response_struct: GetMessagesResponse = serde_json::from_str::<GetMessagesResponse>(&json)
         .with_context(|| format!("Unable to create GetMessagesResponse struct from String {}", json))?;
@@ -424,6 +449,18 @@ impl GetUsersResponse {
         }
     }
 
+    /// This method will attempt to convert the given JSON string into a
+    /// GetUsersResponse structure.
+    /// 
+    /// # Parameters
+    /// ## json
+    /// The string representation of a GetUsersResponse structure in JSON
+    /// format.
+    /// 
+    /// # Returns
+    /// - Ok() containing the parsed GetUsersResponse structure.
+    /// - Err() describing any deserialization errors.
+    #[allow(dead_code)]
     pub fn try_from_json(json: String) -> Result<GetUsersResponse, anyhow::Error> {
         let response_struct: GetUsersResponse = serde_json::from_str::<GetUsersResponse>(&json)
             .with_context(|| format!("Unable to create GetUsersResponse struct from String {}", json))?;
@@ -490,7 +527,41 @@ pub struct SearchMessagesResponse {
     pub messages:   Vec<ChatMessageSchema>,
 }
 
+impl fmt::Display for SearchMessagesResponse {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let display_string = match self.try_to_json() {
+            Ok(string) => string,
+            Err(e) => e.to_string()
+        };
+
+        write!(f, "{}", display_string)
+    }
+}
+
 impl SearchMessagesResponse {
+
+    /// This method will attempt to convert the given JSON string into a
+    /// SearchMessagesResponse structure.
+    /// 
+    /// # Parameters
+    /// ## json
+    /// The string representation of a SearchMessagesResponse structure in JSON
+    /// format.
+    /// 
+    /// # Returns
+    /// - Ok() containing the parsed SearchMessagesResponse structure.
+    /// - Err() describing any deserialization errors.
+    #[allow(dead_code)]
+    pub fn try_from_json
+    (
+        json: String
+    ) -> Result<SearchMessagesResponse, anyhow::Error> {
+        let response_struct: SearchMessagesResponse = serde_json::from_str::<SearchMessagesResponse>(&json)
+            .with_context(|| format!("Unable to create SearchMessagesResponse struct from String {}", json))?;
+
+        Ok(response_struct)
+    } // end try_from_json
+
     /// This method constructs a JSON string from the GetUsersResponse's
     /// fields.
     pub fn try_to_json(&self) -> Result<String, anyhow::Error> {
@@ -543,4 +614,30 @@ impl EdgeViewResponseTypes {
 
         Ok(response_string)
     } // end try_to_json
+}
+
+// #############################################################################
+// #############################################################################
+//                           Supporting Structures
+// #############################################################################
+// #############################################################################
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RealmAccess {
+    pub roles:  Vec<String>
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RealmManagement {
+    pub roles:  Vec<String>
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Account {
+    pub roles:  Vec<String>
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResourceAccess {
+    pub realm_management:   RealmManagement,
+    pub account:            Account,
 }
